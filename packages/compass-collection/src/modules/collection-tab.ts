@@ -129,6 +129,20 @@ export type CollectionState = {
     documentCount: string;
   };
   fakerSchemaGeneration: MockDataGeneratorState;
+  workflowBuilder?: {
+    isModalOpen: boolean;
+    currentStep: string;
+    selectedFields: string[];
+    prompt: string;
+    outputField: string;
+    outputMode: 'overwrite' | 'append' | 'new-field';
+    modelProvider: string;
+    modelName: string;
+    temperature: number;
+    executionLimit: number;
+    mongoUri: string;
+    sampleDocument: Document | null;
+  };
 };
 
 // @ts-expect-error TODO(COMPASS-10124): replace enums with const kv objects
@@ -149,6 +163,19 @@ export enum CollectionActions {
   FakerMappingGenerationFailed = 'compass-collection/FakerMappingGenerationFailed',
   FakerFieldTypeChanged = 'compass-collection/FakerFieldTypeChanged',
   FakerFieldMethodChanged = 'compass-collection/FakerFieldMethodChanged',
+  WorkflowBuilderModalOpened = 'compass-collection/WorkflowBuilderModalOpened',
+  WorkflowBuilderModalClosed = 'compass-collection/WorkflowBuilderModalClosed',
+  WorkflowBuilderNextStep = 'compass-collection/WorkflowBuilderNextStep',
+  WorkflowBuilderPreviousStep = 'compass-collection/WorkflowBuilderPreviousStep',
+  WorkflowBuilderFieldsChanged = 'compass-collection/WorkflowBuilderFieldsChanged',
+  WorkflowBuilderPromptChanged = 'compass-collection/WorkflowBuilderPromptChanged',
+  WorkflowBuilderOutputFieldChanged = 'compass-collection/WorkflowBuilderOutputFieldChanged',
+  WorkflowBuilderOutputModeChanged = 'compass-collection/WorkflowBuilderOutputModeChanged',
+  WorkflowBuilderModelProviderChanged = 'compass-collection/WorkflowBuilderModelProviderChanged',
+  WorkflowBuilderModelNameChanged = 'compass-collection/WorkflowBuilderModelNameChanged',
+  WorkflowBuilderTemperatureChanged = 'compass-collection/WorkflowBuilderTemperatureChanged',
+  WorkflowBuilderExecutionLimitChanged = 'compass-collection/WorkflowBuilderExecutionLimitChanged',
+  WorkflowBuilderMongoUriChanged = 'compass-collection/WorkflowBuilderMongoUriChanged',
 }
 
 interface CollectionMetadataFetchedAction {
@@ -233,6 +260,68 @@ export interface FakerFieldMethodChangedAction {
   type: CollectionActions.FakerFieldMethodChanged;
   fieldPath: string;
   fakerMethod: string;
+}
+
+interface WorkflowBuilderModalOpenedAction {
+  type: CollectionActions.WorkflowBuilderModalOpened;
+  sampleDocument: Document | null;
+}
+
+interface WorkflowBuilderModalClosedAction {
+  type: CollectionActions.WorkflowBuilderModalClosed;
+}
+
+interface WorkflowBuilderNextStepAction {
+  type: CollectionActions.WorkflowBuilderNextStep;
+}
+
+interface WorkflowBuilderPreviousStepAction {
+  type: CollectionActions.WorkflowBuilderPreviousStep;
+}
+
+interface WorkflowBuilderFieldsChangedAction {
+  type: CollectionActions.WorkflowBuilderFieldsChanged;
+  fields: string[];
+}
+
+interface WorkflowBuilderPromptChangedAction {
+  type: CollectionActions.WorkflowBuilderPromptChanged;
+  prompt: string;
+}
+
+interface WorkflowBuilderOutputFieldChangedAction {
+  type: CollectionActions.WorkflowBuilderOutputFieldChanged;
+  field: string;
+}
+
+interface WorkflowBuilderOutputModeChangedAction {
+  type: CollectionActions.WorkflowBuilderOutputModeChanged;
+  mode: string;
+}
+
+interface WorkflowBuilderModelProviderChangedAction {
+  type: CollectionActions.WorkflowBuilderModelProviderChanged;
+  provider: string;
+}
+
+interface WorkflowBuilderModelNameChangedAction {
+  type: CollectionActions.WorkflowBuilderModelNameChanged;
+  name: string;
+}
+
+interface WorkflowBuilderTemperatureChangedAction {
+  type: CollectionActions.WorkflowBuilderTemperatureChanged;
+  temperature: number;
+}
+
+interface WorkflowBuilderExecutionLimitChangedAction {
+  type: CollectionActions.WorkflowBuilderExecutionLimitChanged;
+  limit: number;
+}
+
+interface WorkflowBuilderMongoUriChangedAction {
+  type: CollectionActions.WorkflowBuilderMongoUriChanged;
+  uri: string;
 }
 
 const reducer: Reducer<CollectionState, Action> = (
@@ -622,6 +711,253 @@ const reducer: Reducer<CollectionState, Action> = (
     };
   }
 
+  // Workflow Builder reducer cases
+  if (
+    isAction<WorkflowBuilderModalOpenedAction>(
+      action,
+      CollectionActions.WorkflowBuilderModalOpened
+    )
+  ) {
+    return {
+      ...state,
+      workflowBuilder: {
+        isModalOpen: true,
+        currentStep: 'sample-document',
+        selectedFields: [],
+        prompt: '',
+        outputField: '',
+        outputMode: 'overwrite',
+        modelProvider: 'gemini',
+        modelName: 'gemini-3-flash-preview',
+        temperature: 0.0,
+        executionLimit: 5,
+        mongoUri: 'mongodb://localhost:27017',
+        sampleDocument: action.sampleDocument,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderModalClosedAction>(
+      action,
+      CollectionActions.WorkflowBuilderModalClosed
+    )
+  ) {
+    return {
+      ...state,
+      workflowBuilder: undefined,
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderNextStepAction>(
+      action,
+      CollectionActions.WorkflowBuilderNextStep
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    const steps = [
+      'sample-document',
+      'prompt-configuration',
+      'output-configuration',
+      'model-configuration',
+      'execution-settings',
+      'preview-export',
+    ];
+    const currentIndex = steps.indexOf(state.workflowBuilder.currentStep);
+    const nextStep = steps[Math.min(currentIndex + 1, steps.length - 1)];
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        currentStep: nextStep,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderPreviousStepAction>(
+      action,
+      CollectionActions.WorkflowBuilderPreviousStep
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    const steps = [
+      'sample-document',
+      'prompt-configuration',
+      'output-configuration',
+      'model-configuration',
+      'execution-settings',
+      'preview-export',
+    ];
+    const currentIndex = steps.indexOf(state.workflowBuilder.currentStep);
+    const prevStep = steps[Math.max(currentIndex - 1, 0)];
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        currentStep: prevStep,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderFieldsChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderFieldsChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        selectedFields: action.fields,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderPromptChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderPromptChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        prompt: action.prompt,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderOutputFieldChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderOutputFieldChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        outputField: action.field,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderOutputModeChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderOutputModeChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        outputMode: action.mode as 'overwrite' | 'append' | 'new-field',
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderModelProviderChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderModelProviderChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        modelProvider: action.provider,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderModelNameChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderModelNameChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        modelName: action.name,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderTemperatureChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderTemperatureChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        temperature: action.temperature,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderExecutionLimitChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderExecutionLimitChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        executionLimit: action.limit,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderMongoUriChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderMongoUriChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        mongoUri: action.uri,
+      },
+    };
+  }
+
   return state;
 };
 
@@ -725,6 +1061,113 @@ export const openMockDataGeneratorModal = (): CollectionThunkAction<
     }
   };
 };
+
+// Workflow Builder Actions
+export const openWorkflowBuilderModal = (): CollectionThunkAction<
+  Promise<void>
+> => {
+  return async (dispatch, getState, { dataService, logger }) => {
+    try {
+      const state = getState();
+      const namespace = state.namespace;
+
+      // Fetch one sample document
+      const sampleDocs = await dataService.sample(namespace, {
+        size: 1,
+        query: {},
+      });
+
+      dispatch({
+        type: CollectionActions.WorkflowBuilderModalOpened,
+        sampleDocument: sampleDocs[0] || null,
+      });
+    } catch (error) {
+      logger.log.error(
+        mongoLogId(1_001_000_365),
+        'Collections',
+        'Failed to open workflow builder modal',
+        error
+      );
+    }
+  };
+};
+
+export const closeWorkflowBuilderModal =
+  (): WorkflowBuilderModalClosedAction => ({
+    type: CollectionActions.WorkflowBuilderModalClosed,
+  });
+
+export const workflowBuilderNextStep = (): WorkflowBuilderNextStepAction => ({
+  type: CollectionActions.WorkflowBuilderNextStep,
+});
+
+export const workflowBuilderPreviousStep =
+  (): WorkflowBuilderPreviousStepAction => ({
+    type: CollectionActions.WorkflowBuilderPreviousStep,
+  });
+
+export const workflowBuilderFieldsChanged = (
+  fields: string[]
+): WorkflowBuilderFieldsChangedAction => ({
+  type: CollectionActions.WorkflowBuilderFieldsChanged,
+  fields,
+});
+
+export const workflowBuilderPromptChanged = (
+  prompt: string
+): WorkflowBuilderPromptChangedAction => ({
+  type: CollectionActions.WorkflowBuilderPromptChanged,
+  prompt,
+});
+
+export const workflowBuilderOutputFieldChanged = (
+  field: string
+): WorkflowBuilderOutputFieldChangedAction => ({
+  type: CollectionActions.WorkflowBuilderOutputFieldChanged,
+  field,
+});
+
+export const workflowBuilderOutputModeChanged = (
+  mode: string
+): WorkflowBuilderOutputModeChangedAction => ({
+  type: CollectionActions.WorkflowBuilderOutputModeChanged,
+  mode,
+});
+
+export const workflowBuilderModelProviderChanged = (
+  provider: string
+): Action => ({
+  type: CollectionActions.WorkflowBuilderModelProviderChanged,
+  provider,
+});
+
+export const workflowBuilderModelNameChanged = (
+  name: string
+): WorkflowBuilderModelNameChangedAction => ({
+  type: CollectionActions.WorkflowBuilderModelNameChanged,
+  name,
+});
+
+export const workflowBuilderTemperatureChanged = (
+  temperature: number
+): Action => ({
+  type: CollectionActions.WorkflowBuilderTemperatureChanged,
+  temperature,
+});
+
+export const workflowBuilderExecutionLimitChanged = (
+  limit: number
+): Action => ({
+  type: CollectionActions.WorkflowBuilderExecutionLimitChanged,
+  limit,
+});
+
+export const workflowBuilderMongoUriChanged = (
+  uri: string
+): WorkflowBuilderMongoUriChangedAction => ({
+  type: CollectionActions.WorkflowBuilderMongoUriChanged,
+  uri,
+});
 
 export const analyzeCollectionSchema = (): CollectionThunkAction<
   Promise<void>

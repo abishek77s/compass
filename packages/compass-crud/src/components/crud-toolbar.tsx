@@ -30,9 +30,11 @@ import { AddDataMenu } from './add-data-menu';
 import { usePreference } from 'compass-preferences-model/provider';
 import UpdateMenu from './update-data-menu';
 import DeleteMenu from './delete-data-menu';
+import WorkflowButton from './workflow-button';
 import { QueryBar } from '@mongodb-js/compass-query-bar';
 import { useConnectionInfoRef } from '@mongodb-js/compass-connections/provider';
 import { DOCUMENT_NARROW_ICON_BREAKPOINT } from '../constants/document-narrow-icon-breakpoint';
+import { useGlobalAppRegistry } from '@mongodb-js/compass-app-registry';
 
 const crudQueryBarStyles = css({
   width: '100%',
@@ -148,6 +150,7 @@ export type CrudToolbarProps = {
   onResetClicked: () => void;
   onUpdateButtonClicked: () => void;
   onDeleteButtonClicked: () => void;
+  onWorkflowButtonClicked?: () => void;
   onExpandAllClicked: () => void;
   onCollapseAllClicked: () => void;
   openExportFileDialog: (exportFullCollection?: boolean) => void;
@@ -197,6 +200,11 @@ const CrudToolbar: React.FunctionComponent<CrudToolbarProps> = ({
   docsPerPage,
   updateMaxDocumentsPerPage,
 }) => {
+  const globalAppRegistry = useGlobalAppRegistry();
+
+  const handleWorkflowButtonClick = useCallback(() => {
+    globalAppRegistry.emit('open-workflow-builder-modal');
+  }, [globalAppRegistry]);
   const track = useTelemetry();
   const connectionInfoRef = useConnectionInfoRef();
   const isImportExportEnabled = usePreference('enableImportExport');
@@ -396,6 +404,17 @@ const CrudToolbar: React.FunctionComponent<CrudToolbarProps> = ({
               }
               onClick={onDeleteButtonClicked}
             ></DeleteMenu>
+          )}
+          {!readonly && (
+            <WorkflowButton
+              isWritable={isWritable && !shouldDisableBulkOp}
+              disabledTooltip={
+                isWritable
+                  ? 'Collection must be writable to create a workflow'
+                  : instanceDescription
+              }
+              onClick={handleWorkflowButtonClick}
+            ></WorkflowButton>
           )}
           {insights && <SignalPopover signals={insights} />}
         </div>

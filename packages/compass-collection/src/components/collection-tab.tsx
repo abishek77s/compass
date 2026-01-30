@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect } from 'react';
 import { connect } from 'react-redux';
-import { type CollectionState, selectTab } from '../modules/collection-tab';
+import {
+  type CollectionState,
+  selectTab,
+  openWorkflowBuilderModal,
+} from '../modules/collection-tab';
 import { css, ErrorBoundary, TabNavBar } from '@mongodb-js/compass-components';
 import CollectionHeader from './collection-header';
+import WorkflowBuilderModalContainer from './workflow-builder-modal/workflow-builder-modal-container';
 import toNS from 'mongodb-ns';
 import { useLogger } from '@mongodb-js/compass-logging/provider';
 import {
@@ -24,6 +29,7 @@ import {
   useGlobalAppRegistry,
   useLocalAppRegistry,
 } from '@mongodb-js/compass-app-registry';
+import { useDispatch } from 'react-redux';
 
 type CollectionSubtabTrackingId = Lowercase<CollectionSubtab> extends infer U
   ? U extends string
@@ -177,6 +183,9 @@ const CollectionTabWithMetadata: React.FunctionComponent<
 }) => {
   const track = useTelemetry();
   const connectionInfoRef = useConnectionInfoRef();
+  const globalAppRegistry = useGlobalAppRegistry();
+  const dispatch = useDispatch();
+
   useEffect(() => {
     const activeSubTabName = currentTab
       ? trackingIdForTabName(currentTab)
@@ -192,6 +201,21 @@ const CollectionTabWithMetadata: React.FunctionComponent<
       );
     }
   }, [currentTab, track, connectionInfoRef]);
+
+  useEffect(() => {
+    const onOpenWorkflowBuilder = () => {
+      void dispatch(openWorkflowBuilderModal());
+    };
+
+    globalAppRegistry.on('open-workflow-builder-modal', onOpenWorkflowBuilder);
+    return () => {
+      globalAppRegistry.removeListener(
+        'open-workflow-builder-modal',
+        onOpenWorkflowBuilder
+      );
+    };
+  }, [globalAppRegistry, dispatch]);
+
   const pluginModals = useCollectionScopedModals();
 
   const pluginProps = {
@@ -228,6 +252,7 @@ const CollectionTabWithMetadata: React.FunctionComponent<
         {pluginModals.map((ModalPlugin, idx) => {
           return <ModalPlugin key={idx} {...pluginProps}></ModalPlugin>;
         })}
+        <WorkflowBuilderModalContainer />
       </div>
     </div>
   );
