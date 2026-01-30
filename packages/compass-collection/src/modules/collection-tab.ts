@@ -132,7 +132,6 @@ export type CollectionState = {
   workflowBuilder?: {
     isModalOpen: boolean;
     currentStep: string;
-    selectedFields: string[];
     prompt: string;
     outputField: string;
     outputMode: 'overwrite' | 'append' | 'new-field';
@@ -167,7 +166,7 @@ export enum CollectionActions {
   WorkflowBuilderModalClosed = 'compass-collection/WorkflowBuilderModalClosed',
   WorkflowBuilderNextStep = 'compass-collection/WorkflowBuilderNextStep',
   WorkflowBuilderPreviousStep = 'compass-collection/WorkflowBuilderPreviousStep',
-  WorkflowBuilderFieldsChanged = 'compass-collection/WorkflowBuilderFieldsChanged',
+
   WorkflowBuilderPromptChanged = 'compass-collection/WorkflowBuilderPromptChanged',
   WorkflowBuilderOutputFieldChanged = 'compass-collection/WorkflowBuilderOutputFieldChanged',
   WorkflowBuilderOutputModeChanged = 'compass-collection/WorkflowBuilderOutputModeChanged',
@@ -265,6 +264,7 @@ export interface FakerFieldMethodChangedAction {
 interface WorkflowBuilderModalOpenedAction {
   type: CollectionActions.WorkflowBuilderModalOpened;
   sampleDocument: Document | null;
+  mongoUri: string;
 }
 
 interface WorkflowBuilderModalClosedAction {
@@ -277,11 +277,6 @@ interface WorkflowBuilderNextStepAction {
 
 interface WorkflowBuilderPreviousStepAction {
   type: CollectionActions.WorkflowBuilderPreviousStep;
-}
-
-interface WorkflowBuilderFieldsChangedAction {
-  type: CollectionActions.WorkflowBuilderFieldsChanged;
-  fields: string[];
 }
 
 interface WorkflowBuilderPromptChangedAction {
@@ -722,16 +717,15 @@ const reducer: Reducer<CollectionState, Action> = (
       ...state,
       workflowBuilder: {
         isModalOpen: true,
-        currentStep: 'sample-document',
-        selectedFields: [],
+        currentStep: 'prompt-configuration',
         prompt: '',
         outputField: '',
-        outputMode: 'overwrite',
+        outputMode: 'new-field',
         modelProvider: 'gemini',
-        modelName: 'gemini-3-flash-preview',
+        modelName: 'gemini-2.0-flash',
         temperature: 0.0,
         executionLimit: 5,
-        mongoUri: 'mongodb://localhost:27017',
+        mongoUri: action.mongoUri,
         sampleDocument: action.sampleDocument,
       },
     };
@@ -758,11 +752,9 @@ const reducer: Reducer<CollectionState, Action> = (
     if (!state.workflowBuilder) return state;
 
     const steps = [
-      'sample-document',
       'prompt-configuration',
       'output-configuration',
       'model-configuration',
-      'execution-settings',
       'preview-export',
     ];
     const currentIndex = steps.indexOf(state.workflowBuilder.currentStep);
@@ -786,11 +778,9 @@ const reducer: Reducer<CollectionState, Action> = (
     if (!state.workflowBuilder) return state;
 
     const steps = [
-      'sample-document',
       'prompt-configuration',
       'output-configuration',
       'model-configuration',
-      'execution-settings',
       'preview-export',
     ];
     const currentIndex = steps.indexOf(state.workflowBuilder.currentStep);
@@ -801,23 +791,6 @@ const reducer: Reducer<CollectionState, Action> = (
       workflowBuilder: {
         ...state.workflowBuilder,
         currentStep: prevStep,
-      },
-    };
-  }
-
-  if (
-    isAction<WorkflowBuilderFieldsChangedAction>(
-      action,
-      CollectionActions.WorkflowBuilderFieldsChanged
-    )
-  ) {
-    if (!state.workflowBuilder) return state;
-
-    return {
-      ...state,
-      workflowBuilder: {
-        ...state.workflowBuilder,
-        selectedFields: action.fields,
       },
     };
   }
@@ -1071,6 +1044,23 @@ export const openWorkflowBuilderModal = (): CollectionThunkAction<
       const state = getState();
       const namespace = state.namespace;
 
+      // Get connection URI from dataService
+      let mongoUri = 'mongodb://localhost:27017';
+      try {
+        const connectionString = dataService.getConnectionString().clone();
+        // Remove appName if it's a default compass app name
+        if (
+          /^(mongodb compass|compass web)/i.exec(
+            connectionString.searchParams.get('appName') || ''
+          )
+        ) {
+          connectionString.searchParams.delete('appName');
+        }
+        mongoUri = connectionString.href;
+      } catch {
+        // Fall back to default URI
+      }
+
       // Fetch one sample document
       const sampleDocs = await dataService.sample(namespace, {
         size: 1,
@@ -1080,6 +1070,7 @@ export const openWorkflowBuilderModal = (): CollectionThunkAction<
       dispatch({
         type: CollectionActions.WorkflowBuilderModalOpened,
         sampleDocument: sampleDocs[0] || null,
+        mongoUri,
       });
     } catch (error) {
       logger.log.error(
@@ -1106,13 +1097,6 @@ export const workflowBuilderPreviousStep =
     type: CollectionActions.WorkflowBuilderPreviousStep,
   });
 
-export const workflowBuilderFieldsChanged = (
-  fields: string[]
-): WorkflowBuilderFieldsChangedAction => ({
-  type: CollectionActions.WorkflowBuilderFieldsChanged,
-  fields,
-});
-
 export const workflowBuilderPromptChanged = (
   prompt: string
 ): WorkflowBuilderPromptChangedAction => ({
@@ -1136,7 +1120,7 @@ export const workflowBuilderOutputModeChanged = (
 
 export const workflowBuilderModelProviderChanged = (
   provider: string
-): Action => ({
+): WorkflowBuilderModelProviderChangedAction => ({
   type: CollectionActions.WorkflowBuilderModelProviderChanged,
   provider,
 });
@@ -1150,14 +1134,14 @@ export const workflowBuilderModelNameChanged = (
 
 export const workflowBuilderTemperatureChanged = (
   temperature: number
-): Action => ({
+): WorkflowBuilderTemperatureChangedAction => ({
   type: CollectionActions.WorkflowBuilderTemperatureChanged,
   temperature,
 });
 
 export const workflowBuilderExecutionLimitChanged = (
   limit: number
-): Action => ({
+): WorkflowBuilderExecutionLimitChangedAction => ({
   type: CollectionActions.WorkflowBuilderExecutionLimitChanged,
   limit,
 });

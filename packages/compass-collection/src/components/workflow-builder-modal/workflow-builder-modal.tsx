@@ -10,7 +10,7 @@ import {
   palette,
 } from '@mongodb-js/compass-components';
 
-import type { WorkflowBuilderState } from './types';
+import type { WorkflowBuilderState, OutputMode, ModelProvider } from './types';
 import { WorkflowBuilderStep } from './types';
 import {
   WORKFLOW_BUILDER_STEP_LABELS,
@@ -18,11 +18,9 @@ import {
   NEXT_BUTTON_TEXT,
 } from './constants';
 
-import SampleDocumentScreen from './sample-document-screen';
 import PromptConfigurationScreen from './prompt-configuration-screen';
 import OutputConfigurationScreen from './output-configuration-screen';
 import ModelConfigurationScreen from './model-configuration-screen';
-import ExecutionSettingsScreen from './execution-settings-screen';
 import PreviewExportScreen from './preview-export-screen';
 
 const footerStyles = css({
@@ -171,15 +169,13 @@ export interface WorkflowBuilderModalProps {
   onClose: () => void;
   onNextStep: () => void;
   onPreviousStep: () => void;
-  onFieldsChange: (fields: string[]) => void;
   onPromptChange: (prompt: string) => void;
   onOutputFieldChange: (field: string) => void;
-  onOutputModeChange: (mode: 'overwrite' | 'append' | 'new-field') => void;
-  onModelProviderChange: (provider: string) => void;
+  onOutputModeChange: (mode: OutputMode) => void;
+  onModelProviderChange: (provider: ModelProvider) => void;
   onModelNameChange: (name: string) => void;
   onTemperatureChange: (temp: number) => void;
   onExecutionLimitChange: (limit: number) => void;
-  onMongoUriChange: (uri: string) => void;
 }
 
 const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
@@ -187,7 +183,6 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
   onClose,
   onNextStep,
   onPreviousStep,
-  onFieldsChange,
   onPromptChange,
   onOutputFieldChange,
   onOutputModeChange,
@@ -195,7 +190,6 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
   onModelNameChange,
   onTemperatureChange,
   onExecutionLimitChange,
-  onMongoUriChange,
 }) => {
   const currentStepIndex = WORKFLOW_BUILDER_STEP_ORDER.indexOf(
     state.currentStep
@@ -203,19 +197,17 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
 
   const modalBodyContent = useMemo(() => {
     switch (state.currentStep) {
-      case WorkflowBuilderStep.SAMPLE_DOCUMENT:
-        return (
-          <SampleDocumentScreen
-            sampleDocument={state.sampleDocument}
-            selectedFields={state.selectedFields}
-            onFieldsChange={onFieldsChange}
-          />
-        );
       case WorkflowBuilderStep.PROMPT_CONFIGURATION:
         return (
           <PromptConfigurationScreen
             prompt={state.prompt}
-            selectedFields={state.selectedFields}
+            sampleDocument={state.sampleDocument}
+            mongoUri={state.mongoUri}
+            namespace={state.namespace}
+            modelProvider={state.modelProvider}
+            modelName={state.modelName}
+            temperature={state.temperature}
+            outputField={state.outputField}
             onPromptChange={onPromptChange}
           />
         );
@@ -234,51 +226,31 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
             modelProvider={state.modelProvider}
             modelName={state.modelName}
             temperature={state.temperature}
+            executionLimit={state.executionLimit}
             onProviderChange={onModelProviderChange}
             onModelNameChange={onModelNameChange}
             onTemperatureChange={onTemperatureChange}
-          />
-        );
-      case WorkflowBuilderStep.EXECUTION_SETTINGS:
-        return (
-          <ExecutionSettingsScreen
-            executionLimit={state.executionLimit}
-            mongoUri={state.mongoUri}
             onExecutionLimitChange={onExecutionLimitChange}
-            onMongoUriChange={onMongoUriChange}
           />
         );
       case WorkflowBuilderStep.PREVIEW_EXPORT:
         return (
           <PreviewExportScreen
-            configuration={{
-              mongo: {
-                uri: state.mongoUri,
-                database: state.namespace.split('.')[0] || 'mydatabase',
-                collection: state.namespace.split('.')[1] || 'collection',
-              },
-              input_fields: state.selectedFields,
-              output: {
-                field: state.outputField,
-                mode: state.outputMode,
-              },
-              prompt: state.prompt,
-              model: {
-                provider: state.modelProvider,
-                name: state.modelName,
-                temperature: state.temperature,
-              },
-              execution: {
-                limit:
-                  state.executionLimit > 0 ? state.executionLimit : undefined,
-              },
-            }}
+            prompt={state.prompt}
+            outputField={state.outputField}
+            outputMode={state.outputMode}
+            modelProvider={state.modelProvider}
+            modelName={state.modelName}
+            temperature={state.temperature}
+            executionLimit={state.executionLimit}
+            mongoUri={state.mongoUri}
+            maskedUri={state.maskedUri}
+            namespace={state.namespace}
           />
         );
     }
   }, [
     state,
-    onFieldsChange,
     onPromptChange,
     onOutputFieldChange,
     onOutputModeChange,
@@ -286,21 +258,16 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
     onModelNameChange,
     onTemperatureChange,
     onExecutionLimitChange,
-    onMongoUriChange,
   ]);
 
   const isNextButtonDisabled = useMemo(() => {
     switch (state.currentStep) {
-      case WorkflowBuilderStep.SAMPLE_DOCUMENT:
-        return state.selectedFields.length === 0;
       case WorkflowBuilderStep.PROMPT_CONFIGURATION:
         return !state.prompt.trim();
       case WorkflowBuilderStep.OUTPUT_CONFIGURATION:
         return !state.outputField.trim();
       case WorkflowBuilderStep.MODEL_CONFIGURATION:
         return !state.modelProvider || !state.modelName;
-      case WorkflowBuilderStep.EXECUTION_SETTINGS:
-        return !state.mongoUri.trim();
       case WorkflowBuilderStep.PREVIEW_EXPORT:
         return false;
       default:

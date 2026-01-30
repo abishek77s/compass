@@ -4,7 +4,6 @@ import {
   closeWorkflowBuilderModal,
   workflowBuilderNextStep,
   workflowBuilderPreviousStep,
-  workflowBuilderFieldsChanged,
   workflowBuilderPromptChanged,
   workflowBuilderOutputFieldChanged,
   workflowBuilderOutputModeChanged,
@@ -12,11 +11,14 @@ import {
   workflowBuilderModelNameChanged,
   workflowBuilderTemperatureChanged,
   workflowBuilderExecutionLimitChanged,
-  workflowBuilderMongoUriChanged,
 } from '../../modules/collection-tab';
 import WorkflowBuilderModal from './workflow-builder-modal';
 import type { WorkflowBuilderState, OutputMode, ModelProvider } from './types';
-import { WorkflowBuilderStep, INITIAL_WORKFLOW_STATE } from './types';
+import {
+  WorkflowBuilderStep,
+  INITIAL_WORKFLOW_STATE,
+  maskMongoUri,
+} from './types';
 
 interface StateProps {
   state: WorkflowBuilderState;
@@ -26,30 +28,27 @@ interface DispatchProps {
   onClose: () => void;
   onNextStep: () => void;
   onPreviousStep: () => void;
-  onFieldsChange: (fields: string[]) => void;
   onPromptChange: (prompt: string) => void;
   onOutputFieldChange: (field: string) => void;
   onOutputModeChange: (mode: OutputMode) => void;
-  onModelProviderChange: (provider: string) => void;
+  onModelProviderChange: (provider: ModelProvider) => void;
   onModelNameChange: (name: string) => void;
   onTemperatureChange: (temp: number) => void;
   onExecutionLimitChange: (limit: number) => void;
-  onMongoUriChange: (uri: string) => void;
 }
 
 const mapStateToProps = (state: CollectionState): StateProps => {
   const wb = state.workflowBuilder;
+  const mongoUri = wb?.mongoUri ?? 'mongodb://localhost:27017';
 
   return {
     state: {
       isOpen: wb?.isModalOpen ?? false,
       currentStep:
         (wb?.currentStep as WorkflowBuilderStep) ??
-        WorkflowBuilderStep.SAMPLE_DOCUMENT,
+        WorkflowBuilderStep.PROMPT_CONFIGURATION,
       namespace: state.namespace,
       sampleDocument: wb?.sampleDocument ?? null,
-      selectedFields:
-        wb?.selectedFields ?? INITIAL_WORKFLOW_STATE.selectedFields,
       prompt: wb?.prompt ?? INITIAL_WORKFLOW_STATE.prompt,
       outputField: wb?.outputField ?? INITIAL_WORKFLOW_STATE.outputField,
       outputMode:
@@ -61,7 +60,11 @@ const mapStateToProps = (state: CollectionState): StateProps => {
       temperature: wb?.temperature ?? INITIAL_WORKFLOW_STATE.temperature,
       executionLimit:
         wb?.executionLimit ?? INITIAL_WORKFLOW_STATE.executionLimit,
-      mongoUri: wb?.mongoUri ?? INITIAL_WORKFLOW_STATE.mongoUri,
+      mongoUri: mongoUri,
+      maskedUri: maskMongoUri(mongoUri),
+      isTestLoading: INITIAL_WORKFLOW_STATE.isTestLoading,
+      testResult: INITIAL_WORKFLOW_STATE.testResult,
+      testError: INITIAL_WORKFLOW_STATE.testError,
     },
   };
 };
@@ -70,7 +73,6 @@ const mapDispatchToProps: DispatchProps = {
   onClose: closeWorkflowBuilderModal,
   onNextStep: workflowBuilderNextStep,
   onPreviousStep: workflowBuilderPreviousStep,
-  onFieldsChange: workflowBuilderFieldsChanged,
   onPromptChange: workflowBuilderPromptChanged,
   onOutputFieldChange: workflowBuilderOutputFieldChanged,
   onOutputModeChange: workflowBuilderOutputModeChanged,
@@ -78,7 +80,6 @@ const mapDispatchToProps: DispatchProps = {
   onModelNameChange: workflowBuilderModelNameChanged,
   onTemperatureChange: workflowBuilderTemperatureChanged,
   onExecutionLimitChange: workflowBuilderExecutionLimitChanged,
-  onMongoUriChange: workflowBuilderMongoUriChanged,
 };
 
 export default connect<

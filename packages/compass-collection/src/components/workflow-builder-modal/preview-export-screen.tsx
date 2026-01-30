@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  Body,
   Description,
   Label,
   spacing,
@@ -10,6 +9,7 @@ import {
   Banner,
 } from '@mongodb-js/compass-components';
 import type { WorkflowConfiguration } from './types';
+import { convertPromptToConfig, extractFieldsFromPrompt } from './types';
 
 const containerStyles = css({
   display: 'flex',
@@ -34,19 +34,9 @@ const jsonBoxStyles = css({
   fontSize: '12px',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-all',
-  maxHeight: '400px',
+  maxHeight: '300px',
   overflow: 'auto',
   border: '1px solid var(--palette-gray-light2)',
-});
-
-const copyButtonStyles = css({
-  position: 'absolute',
-  top: spacing[200],
-  right: spacing[200],
-});
-
-const successBannerStyles = css({
-  marginTop: spacing[300],
 });
 
 const summaryBoxStyles = css({
@@ -69,146 +59,195 @@ const summaryValueStyles = css({
   fontFamily: 'monospace',
 });
 
+const buttonRowStyles = css({
+  display: 'flex',
+  gap: spacing[200],
+  marginTop: spacing[200],
+});
+
 interface PreviewExportScreenProps {
-  configuration: WorkflowConfiguration;
+  prompt: string;
+  outputField: string;
+  outputMode: 'overwrite' | 'append' | 'new-field';
+  modelProvider: string;
+  modelName: string;
+  temperature: number;
+  executionLimit: number;
+  mongoUri: string;
+  maskedUri: string;
+  namespace: string;
 }
 
 const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
-  configuration,
+  prompt,
+  outputField,
+  outputMode,
+  modelProvider,
+  modelName,
+  temperature,
+  executionLimit,
+  mongoUri,
+  maskedUri,
+  namespace,
 }) => {
   const [copied, setCopied] = useState(false);
 
-  const formattedJson = useMemo(() => {
-    return JSON.stringify(configuration, null, 2);
-  }, [configuration]);
+  const [database, collection] = namespace.split('.');
+  const inputFields = extractFieldsFromPrompt(prompt);
+  const configPrompt = convertPromptToConfig(prompt);
 
-  const handleCopyToClipboard = useCallback(() => {
-    void navigator.clipboard.writeText(formattedJson).then(() => {
+  const configuration: WorkflowConfiguration = useMemo(
+    () => ({
+      mongo: {
+        uri: mongoUri,
+        database: database || '',
+        collection: collection || '',
+      },
+      input_fields: inputFields,
+      output: {
+        field: outputField,
+        mode: outputMode,
+      },
+      prompt: configPrompt,
+      model: {
+        provider: modelProvider as WorkflowConfiguration['model']['provider'],
+        name: modelName,
+        temperature: temperature,
+      },
+      execution: {
+        limit: executionLimit > 0 ? executionLimit : undefined,
+      },
+    }),
+    [
+      mongoUri,
+      database,
+      collection,
+      inputFields,
+      outputField,
+      outputMode,
+      configPrompt,
+      modelProvider,
+      modelName,
+      temperature,
+      executionLimit,
+    ]
+  );
+
+  // For display, use masked URI
+  const displayConfiguration = useMemo(() => {
+    return {
+      ...configuration,
+      mongo: {
+        ...configuration.mongo,
+        uri: maskedUri,
+      },
+    };
+  }, [configuration, maskedUri]);
+
+  const formattedJson = useMemo(() => {
+    return JSON.stringify(displayConfiguration, null, 2);
+  }, [displayConfiguration]);
+
+  const handleCopyConfig = useCallback(() => {
+    // Copy with real URI
+    const fullConfig = JSON.stringify(configuration, null, 2);
+    void navigator.clipboard.writeText(fullConfig).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     });
-  }, [formattedJson]);
+  }, [configuration]);
 
-  const handleDownload = useCallback(() => {
-    const blob = new Blob([formattedJson], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `workflow-${
-      configuration.mongo.collection
-    }-${Date.now()}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [formattedJson, configuration.mongo.collection]);
+  const handleDeploy = useCallback(() => {
+    // TODO: Implement deploy functionality
+    // eslint-disable-next-line no-console
+    console.log('Deploy clicked - TODO');
+  }, []);
 
   return (
     <div className={containerStyles}>
       <Banner variant="success">
-        <strong>Workflow Configuration Complete!</strong> Your workflow is ready
-        to use. Copy the JSON below and use it with your workflow execution
-        tool.
+        <strong>Workflow Configuration Complete!</strong> Review your
+        configuration below, then copy or deploy it.
       </Banner>
 
       <div>
         <Label htmlFor="config-summary">Configuration Summary</Label>
         <Description className={descriptionStyles}>
-          Review your workflow configuration before exporting:
+          Review your workflow configuration:
         </Description>
         <div className={summaryBoxStyles}>
           <div className={summaryLabelStyles}>Collection:</div>
           <div className={summaryValueStyles}>
-            {configuration.mongo.database}.{configuration.mongo.collection}
+            {database}.{collection}
           </div>
 
           <div className={summaryLabelStyles}>Input Fields:</div>
           <div className={summaryValueStyles}>
-            {configuration.input_fields.length} field
-            {configuration.input_fields.length === 1 ? '' : 's'} (
-            {configuration.input_fields.join(', ')})
+            {inputFields.length > 0 ? inputFields.join(', ') : '(none)'}
           </div>
 
           <div className={summaryLabelStyles}>Output Field:</div>
           <div className={summaryValueStyles}>
-            {configuration.output.field} ({configuration.output.mode})
+            {outputField} ({outputMode})
           </div>
 
           <div className={summaryLabelStyles}>Model:</div>
           <div className={summaryValueStyles}>
-            {configuration.model.provider} / {configuration.model.name}
+            {modelProvider} / {modelName}
           </div>
 
           <div className={summaryLabelStyles}>Temperature:</div>
-          <div className={summaryValueStyles}>
-            {configuration.model.temperature}
-          </div>
+          <div className={summaryValueStyles}>{temperature}</div>
 
           <div className={summaryLabelStyles}>Execution Limit:</div>
           <div className={summaryValueStyles}>
-            {configuration.execution.limit || 'No limit (all documents)'}
+            {executionLimit > 0 ? executionLimit : 'No limit'}
           </div>
+
+          <div className={summaryLabelStyles}>MongoDB URI:</div>
+          <div className={summaryValueStyles}>{maskedUri}</div>
         </div>
       </div>
 
       <div>
-        <Label htmlFor="workflow-json-box">Workflow JSON</Label>
+        <Label htmlFor="workflow-json">Workflow JSON</Label>
         <Description className={descriptionStyles}>
-          This JSON configuration can be used with your workflow execution tool
-          or stored for later use.
+          This configuration can be used with mittai to process your documents.
         </Description>
         <div className={jsonContainerStyles}>
-          <Button
-            className={copyButtonStyles}
-            variant="primary"
-            size="small"
-            leftGlyph={<Icon glyph={copied ? 'Checkmark' : 'Copy'} />}
-            onClick={() => handleCopyToClipboard()}
-            data-testid="copy-json-button"
-          >
-            {copied ? 'Copied!' : 'Copy'}
-          </Button>
           <div id="workflow-json" className={jsonBoxStyles}>
             {formattedJson}
           </div>
         </div>
       </div>
 
-      {copied && (
-        <Banner variant="success" className={successBannerStyles}>
-          Workflow JSON copied to clipboard!
-        </Banner>
-      )}
-
-      <div style={{ display: 'flex', gap: spacing[200] }}>
+      <div className={buttonRowStyles}>
+        <Button
+          variant="primary"
+          leftGlyph={<Icon glyph={copied ? 'Checkmark' : 'Copy'} />}
+          onClick={handleCopyConfig}
+        >
+          {copied ? 'Copied!' : 'Copy Config'}
+        </Button>
         <Button
           variant="primaryOutline"
-          leftGlyph={<Icon glyph="Download" />}
-          onClick={handleDownload}
-          data-testid="download-json-button"
+          leftGlyph={<Icon glyph="Cloud" />}
+          onClick={handleDeploy}
         >
-          Download JSON
+          Deploy (TODO)
         </Button>
       </div>
 
-      <Banner variant="info">
-        <strong>Next Steps:</strong>
-        <Body style={{ marginTop: spacing[200] }}>
-          1. Save this JSON configuration to a file
-        </Body>
-        <Body>2. Set up your AI provider API credentials</Body>
-        <Body>
-          3. Use a workflow execution tool (e.g., Python script, Node.js app) to
-          run this workflow
-        </Body>
-        <Body>4. Monitor execution and verify results in your collection</Body>
-      </Banner>
+      {copied && (
+        <Banner variant="success">
+          Configuration copied to clipboard! (with full MongoDB URI)
+        </Banner>
+      )}
 
       <Banner variant="warning">
-        <strong>Security Note:</strong> This configuration contains your MongoDB
-        connection URI. Make sure to store it securely and never commit it to
-        public repositories. Consider using environment variables for sensitive
-        information.
+        <strong>Note:</strong> The copied configuration contains your full
+        MongoDB URI. Keep it secure and avoid committing it to public
+        repositories.
       </Banner>
     </div>
   );

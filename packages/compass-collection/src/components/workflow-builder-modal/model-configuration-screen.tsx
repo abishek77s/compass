@@ -8,6 +8,8 @@ import {
   Select,
   Option,
   Banner,
+  TextInput,
+  Checkbox,
 } from '@mongodb-js/compass-components';
 import type { ModelProvider } from './types';
 import { MODEL_OPTIONS } from './types';
@@ -50,23 +52,40 @@ const configSummaryStyles = css({
   fontSize: '12px',
 });
 
+const inputWithHintStyles = css({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: spacing[100],
+});
+
+const hintTextStyles = css({
+  fontSize: '12px',
+  color: 'var(--palette-gray-dark1)',
+});
+
 interface ModelConfigurationScreenProps {
   modelProvider: ModelProvider;
   modelName: string;
   temperature: number;
+  executionLimit: number;
   onProviderChange: (provider: ModelProvider) => void;
   onModelNameChange: (name: string) => void;
   onTemperatureChange: (temp: number) => void;
+  onExecutionLimitChange: (limit: number) => void;
 }
 
 const ModelConfigurationScreen: React.FC<ModelConfigurationScreenProps> = ({
   modelProvider,
   modelName,
   temperature,
+  executionLimit,
   onProviderChange,
   onModelNameChange,
   onTemperatureChange,
+  onExecutionLimitChange,
 }) => {
+  const [enableLimit, setEnableLimit] = React.useState(executionLimit > 0);
+
   const handleProviderChange = useCallback(
     (value: string) => {
       onProviderChange(value as ModelProvider);
@@ -89,6 +108,26 @@ const ModelConfigurationScreen: React.FC<ModelConfigurationScreenProps> = ({
       onTemperatureChange(parseFloat(event.target.value));
     },
     [onTemperatureChange]
+  );
+
+  const handleEnableLimitChange = useCallback(() => {
+    const newEnableLimit = !enableLimit;
+    setEnableLimit(newEnableLimit);
+    if (!newEnableLimit) {
+      onExecutionLimitChange(0);
+    } else {
+      onExecutionLimitChange(5);
+    }
+  }, [enableLimit, onExecutionLimitChange]);
+
+  const handleLimitChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = parseInt(event.target.value, 10);
+      if (!isNaN(value) && value >= 0) {
+        onExecutionLimitChange(value);
+      }
+    },
+    [onExecutionLimitChange]
   );
 
   const availableModels = useMemo(() => {
@@ -133,8 +172,7 @@ const ModelConfigurationScreen: React.FC<ModelConfigurationScreenProps> = ({
       <div>
         <Label htmlFor="model-name">Model Name</Label>
         <Description className={descriptionStyles}>
-          Select the specific model to use. Different models have different
-          capabilities, speeds, and costs.
+          Select the specific model to use.
         </Description>
         <Select
           id="model-name"
@@ -158,9 +196,7 @@ const ModelConfigurationScreen: React.FC<ModelConfigurationScreenProps> = ({
           </span>
         </Label>
         <Description className={descriptionStyles}>
-          Controls randomness in the model&apos;s responses. Lower values make
-          output more focused and deterministic, higher values make it more
-          creative and varied.
+          Controls randomness in the model&apos;s responses.
         </Description>
         <div className={sliderContainerStyles}>
           <input
@@ -187,11 +223,46 @@ const ModelConfigurationScreen: React.FC<ModelConfigurationScreenProps> = ({
             <span>2 (Creative)</span>
           </div>
         </div>
+        <Banner variant="info" className={infoBannerStyles}>
+          {getTemperatureDescription()}
+        </Banner>
       </div>
 
-      <Banner variant="info" className={infoBannerStyles}>
-        {getTemperatureDescription()}
-      </Banner>
+      <div>
+        <Checkbox
+          onChange={handleEnableLimitChange}
+          label="Limit number of documents to process"
+          checked={enableLimit}
+          bold
+        />
+        <Description
+          className={descriptionStyles}
+          style={{ marginTop: spacing[200] }}
+        >
+          Restrict the workflow to process only a specific number of documents.
+          Useful for testing or controlling costs.
+        </Description>
+
+        {enableLimit && (
+          <div
+            className={inputWithHintStyles}
+            style={{ marginTop: spacing[200] }}
+          >
+            <TextInput
+              id="execution-limit"
+              type="number"
+              value={executionLimit.toString()}
+              onChange={handleLimitChange}
+              placeholder="5"
+              aria-label="Execution limit"
+              min="1"
+            />
+            <div className={hintTextStyles}>
+              Number of documents to process (0 = all documents)
+            </div>
+          </div>
+        )}
+      </div>
 
       <div>
         <Label htmlFor="config-summary-box">Configuration Summary</Label>
@@ -199,14 +270,14 @@ const ModelConfigurationScreen: React.FC<ModelConfigurationScreenProps> = ({
           <Body>Provider: {MODEL_OPTIONS[modelProvider].label}</Body>
           <Body>Model: {modelName}</Body>
           <Body>Temperature: {temperature.toFixed(1)}</Body>
+          <Body>
+            Limit:{' '}
+            {enableLimit && executionLimit > 0
+              ? `${executionLimit} documents`
+              : 'All documents'}
+          </Body>
         </div>
       </div>
-
-      <Banner variant="warning" className={infoBannerStyles}>
-        Make sure you have the necessary API credentials configured for{' '}
-        {MODEL_OPTIONS[modelProvider].label}. The workflow will fail at runtime
-        if authentication is not properly set up.
-      </Banner>
     </div>
   );
 };
