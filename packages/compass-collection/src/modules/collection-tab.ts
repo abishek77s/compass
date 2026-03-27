@@ -141,6 +141,42 @@ export type CollectionState = {
     executionLimit: number;
     mongoUri: string;
     sampleDocument: Document | null;
+    filterConditions: Array<{
+      id: string;
+      field: string;
+      operator: string;
+      value: string | number | boolean;
+      enabled: boolean;
+    }>;
+    savedWorkflows: Array<{
+      id: string;
+      name: string;
+      description: string;
+      namespace: string;
+      createdAt: string;
+      updatedAt: string;
+      config: {
+        mongo: {
+          database: string;
+          collection: string;
+        };
+        input_fields: string[];
+        output: {
+          field: string;
+          mode: 'overwrite' | 'append' | 'new-field';
+        };
+        prompt: string;
+        model: {
+          provider: 'gemini' | 'openai' | 'anthropic' | 'azure-openai';
+          name: string;
+          temperature: number;
+        };
+        execution: {
+          limit?: number;
+        };
+      };
+    }>;
+    selectedWorkflowId: string | null;
   };
 };
 
@@ -175,6 +211,8 @@ export enum CollectionActions {
   WorkflowBuilderTemperatureChanged = 'compass-collection/WorkflowBuilderTemperatureChanged',
   WorkflowBuilderExecutionLimitChanged = 'compass-collection/WorkflowBuilderExecutionLimitChanged',
   WorkflowBuilderMongoUriChanged = 'compass-collection/WorkflowBuilderMongoUriChanged',
+  WorkflowBuilderFilterConditionsChanged = 'compass-collection/WorkflowBuilderFilterConditionsChanged',
+  WorkflowBuilderSaveWorkflow = 'compass-collection/WorkflowBuilderSaveWorkflow',
 }
 
 interface CollectionMetadataFetchedAction {
@@ -317,6 +355,23 @@ interface WorkflowBuilderExecutionLimitChangedAction {
 interface WorkflowBuilderMongoUriChangedAction {
   type: CollectionActions.WorkflowBuilderMongoUriChanged;
   uri: string;
+}
+
+interface WorkflowBuilderFilterConditionsChangedAction {
+  type: CollectionActions.WorkflowBuilderFilterConditionsChanged;
+  conditions: Array<{
+    id: string;
+    field: string;
+    operator: string;
+    value: string | number | boolean;
+    enabled: boolean;
+  }>;
+}
+
+interface WorkflowBuilderSaveWorkflowAction {
+  type: CollectionActions.WorkflowBuilderSaveWorkflow;
+  name: string;
+  description: string;
 }
 
 const reducer: Reducer<CollectionState, Action> = (
@@ -722,11 +777,14 @@ const reducer: Reducer<CollectionState, Action> = (
         outputField: '',
         outputMode: 'new-field',
         modelProvider: 'gemini',
-        modelName: 'gemini-2.0-flash',
+        modelName: 'gemini-3-flash-preview',
         temperature: 0.0,
         executionLimit: 5,
         mongoUri: action.mongoUri,
         sampleDocument: action.sampleDocument,
+        filterConditions: [],
+        savedWorkflows: state.workflowBuilder?.savedWorkflows ?? [],
+        selectedWorkflowId: null,
       },
     };
   }
@@ -754,6 +812,8 @@ const reducer: Reducer<CollectionState, Action> = (
     const steps = [
       'prompt-configuration',
       'output-configuration',
+      'filter-configuration',
+      'test-prompt',
       'model-configuration',
       'preview-export',
     ];
@@ -780,6 +840,8 @@ const reducer: Reducer<CollectionState, Action> = (
     const steps = [
       'prompt-configuration',
       'output-configuration',
+      'filter-configuration',
+      'test-prompt',
       'model-configuration',
       'preview-export',
     ];
@@ -927,6 +989,80 @@ const reducer: Reducer<CollectionState, Action> = (
       workflowBuilder: {
         ...state.workflowBuilder,
         mongoUri: action.uri,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderFilterConditionsChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderFilterConditionsChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        filterConditions: action.conditions,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderSaveWorkflowAction>(
+      action,
+      CollectionActions.WorkflowBuilderSaveWorkflow
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    const now = new Date().toISOString();
+    const newWorkflow = {
+      id: `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: action.name,
+      description: action.description,
+      namespace: state.namespace,
+      createdAt: now,
+      updatedAt: now,
+      config: {
+        mongo: {
+          database: state.namespace.split('.')[0] || '',
+          collection: state.namespace.split('.')[1] || '',
+        },
+        input_fields: [] as string[],
+        output: {
+          field: state.workflowBuilder.outputField,
+          mode: state.workflowBuilder.outputMode,
+        },
+        prompt: state.workflowBuilder.prompt,
+        model: {
+          provider: state.workflowBuilder.modelProvider as
+            | 'gemini'
+            | 'openai'
+            | 'anthropic'
+            | 'azure-openai',
+          name: state.workflowBuilder.modelName,
+          temperature: state.workflowBuilder.temperature,
+        },
+        execution: {
+          limit:
+            state.workflowBuilder.executionLimit > 0
+              ? state.workflowBuilder.executionLimit
+              : undefined,
+        },
+      },
+    };
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        savedWorkflows: [
+          ...(state.workflowBuilder.savedWorkflows ?? []),
+          newWorkflow,
+        ],
       },
     };
   }
@@ -1152,6 +1288,76 @@ export const workflowBuilderMongoUriChanged = (
   type: CollectionActions.WorkflowBuilderMongoUriChanged,
   uri,
 });
+
+export const workflowBuilderFilterConditionsChanged = (
+  conditions: Array<{
+    id: string;
+    field: string;
+    operator: string;
+    value: string | number | boolean;
+    enabled: boolean;
+  }>
+): WorkflowBuilderFilterConditionsChangedAction => ({
+  type: CollectionActions.WorkflowBuilderFilterConditionsChanged,
+  conditions,
+});
+
+export const workflowBuilderSaveWorkflow = (
+  name: string,
+  description: string
+): CollectionThunkAction<void, WorkflowBuilderSaveWorkflowAction> => {
+  return (dispatch, getState) => {
+    // Dispatch to Redux immediately for local state update
+    dispatch({
+      type: CollectionActions.WorkflowBuilderSaveWorkflow,
+      name,
+      description,
+    });
+
+    // Also persist to the mittai backend
+    const state = getState();
+    if (!state.workflowBuilder) return;
+
+    const wb = state.workflowBuilder;
+    const [database, collection] = state.namespace.split('.');
+
+    const payload = {
+      name,
+      description,
+      namespace: state.namespace,
+      config: {
+        mongo: {
+          database: database || '',
+          collection: collection || '',
+        },
+        input_fields: [] as string[],
+        output: {
+          field: wb.outputField,
+          mode: wb.outputMode,
+        },
+        prompt: wb.prompt,
+        model: {
+          provider: wb.modelProvider,
+          name: wb.modelName,
+          temperature: wb.temperature,
+        },
+        execution: {
+          limit: wb.executionLimit > 0 ? wb.executionLimit : undefined,
+        },
+      },
+    };
+
+    // Fire-and-forget POST to mittai server
+    void fetch('http://localhost:8787/workflows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to save workflow to mittai server:', err);
+    });
+  };
+};
 
 export const analyzeCollectionSchema = (): CollectionThunkAction<
   Promise<void>

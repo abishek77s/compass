@@ -11,9 +11,16 @@ import {
   workflowBuilderModelNameChanged,
   workflowBuilderTemperatureChanged,
   workflowBuilderExecutionLimitChanged,
+  workflowBuilderFilterConditionsChanged,
+  workflowBuilderSaveWorkflow,
 } from '../../modules/collection-tab';
 import WorkflowBuilderModal from './workflow-builder-modal';
-import type { WorkflowBuilderState, OutputMode, ModelProvider } from './types';
+import type {
+  WorkflowBuilderState,
+  OutputMode,
+  ModelProvider,
+  FilterCondition,
+} from './types';
 import {
   WorkflowBuilderStep,
   INITIAL_WORKFLOW_STATE,
@@ -35,10 +42,30 @@ interface DispatchProps {
   onModelNameChange: (name: string) => void;
   onTemperatureChange: (temp: number) => void;
   onExecutionLimitChange: (limit: number) => void;
+  onFilterConditionsChange: (conditions: FilterCondition[]) => void;
+  onSaveWorkflow: (name: string, description: string) => void;
+}
+
+// Define a more flexible type for the workflow builder state from Redux
+interface WorkflowBuilderReduxState {
+  isModalOpen?: boolean;
+  currentStep?: string;
+  prompt?: string;
+  outputField?: string;
+  outputMode?: string;
+  modelProvider?: string;
+  modelName?: string;
+  temperature?: number;
+  executionLimit?: number;
+  mongoUri?: string;
+  sampleDocument?: Document | null;
+  filterConditions?: FilterCondition[];
+  savedWorkflows?: WorkflowBuilderState['savedWorkflows'];
+  selectedWorkflowId?: string | null;
 }
 
 const mapStateToProps = (state: CollectionState): StateProps => {
-  const wb = state.workflowBuilder;
+  const wb = state.workflowBuilder as WorkflowBuilderReduxState | undefined;
   const mongoUri = wb?.mongoUri ?? 'mongodb://localhost:27017';
 
   return {
@@ -62,9 +89,15 @@ const mapStateToProps = (state: CollectionState): StateProps => {
         wb?.executionLimit ?? INITIAL_WORKFLOW_STATE.executionLimit,
       mongoUri: mongoUri,
       maskedUri: maskMongoUri(mongoUri),
+      filterConditions:
+        wb?.filterConditions ?? INITIAL_WORKFLOW_STATE.filterConditions,
       isTestLoading: INITIAL_WORKFLOW_STATE.isTestLoading,
       testResult: INITIAL_WORKFLOW_STATE.testResult,
       testError: INITIAL_WORKFLOW_STATE.testError,
+      savedWorkflows:
+        wb?.savedWorkflows ?? INITIAL_WORKFLOW_STATE.savedWorkflows,
+      selectedWorkflowId:
+        wb?.selectedWorkflowId ?? INITIAL_WORKFLOW_STATE.selectedWorkflowId,
     },
   };
 };
@@ -80,6 +113,8 @@ const mapDispatchToProps: DispatchProps = {
   onModelNameChange: workflowBuilderModelNameChanged,
   onTemperatureChange: workflowBuilderTemperatureChanged,
   onExecutionLimitChange: workflowBuilderExecutionLimitChanged,
+  onFilterConditionsChange: workflowBuilderFilterConditionsChanged,
+  onSaveWorkflow: workflowBuilderSaveWorkflow,
 };
 
 export default connect<

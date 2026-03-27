@@ -40,6 +40,10 @@ const activeNavigationItem = css({
   backgroundColor: 'var(--item-bg-color-active)',
 });
 
+const subItemStyles = css({
+  paddingLeft: spacing[600],
+});
+
 const itemButtonWrapper = css({
   zIndex: 1,
   minWidth: 0,
@@ -99,10 +103,15 @@ export function Navigation({
   currentLocation: string | null;
 }): React.ReactElement {
   const { hasWorkspacePlugin } = useWorkspacePlugins();
-  const { openMyQueriesWorkspace, openDataModelingWorkspace } =
-    useOpenWorkspace();
+  const {
+    openMyQueriesWorkspace,
+    openDataModelingWorkspace,
+    openManageWorkflowsWorkspace,
+  } = useOpenWorkspace();
   const isDataModelingEnabled = usePreference('enableDataModeling');
   const isMyQueriesEnabled = usePreference('enableMyQueries');
+  const isWorkflowManagementEnabled = usePreference('enableWorkflowManagement');
+
   return (
     <div>
       {hasWorkspacePlugin('My Queries') && isMyQueriesEnabled && (
@@ -114,12 +123,24 @@ export function Navigation({
         />
       )}
       {isDataModelingEnabled && (
-        <NavigationItem
-          onClick={openDataModelingWorkspace}
-          glyph="Diagram"
-          label="Data Modeling"
-          isActive={currentLocation === 'Data Modeling'}
-        />
+        <>
+          <NavigationItem
+            onClick={openDataModelingWorkspace}
+            glyph="Diagram"
+            label="Data Modeling"
+            isActive={currentLocation === 'Data Modeling'}
+          />
+          {isWorkflowManagementEnabled && (
+            <div className={subItemStyles}>
+              <NavigationItem
+                onClick={openManageWorkflowsWorkspace}
+                glyph="Sparkle"
+                label="Manage Workflows"
+                isActive={currentLocation === 'Manage Workflows'}
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -77,7 +77,10 @@ import { type TelemetryServiceOptions } from '@mongodb-js/compass-telemetry';
 import { WebWorkspaceTab as WelcomeWorkspaceTab } from '@mongodb-js/compass-welcome';
 import { WorkspaceTab as MyQueriesWorkspace } from '@mongodb-js/compass-saved-aggregations-queries';
 import { useCompassWebPreferences } from './preferences';
-import { DataModelingWorkspaceTab as DataModelingWorkspace } from '@mongodb-js/compass-data-modeling';
+import {
+  DataModelingWorkspaceTab as DataModelingWorkspace,
+  ManageWorkflowsWorkspaceTab as ManageWorkflowsWorkspace,
+} from '@mongodb-js/compass-data-modeling';
 import { DataModelStorageServiceProviderWeb } from '@mongodb-js/compass-data-modeling/web';
 import {
   createWebRecentQueryStorage,
@@ -322,6 +325,7 @@ function CompassWorkspace({
         CollectionsWorkspaceTab,
         CollectionWorkspace,
         DataModelingWorkspace,
+        ManageWorkflowsWorkspace,
         MyQueriesWorkspace,
       ]}
     >

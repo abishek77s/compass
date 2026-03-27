@@ -3,6 +3,8 @@ import type { Document } from 'mongodb';
 export enum WorkflowBuilderStep {
   PROMPT_CONFIGURATION = 'prompt-configuration',
   OUTPUT_CONFIGURATION = 'output-configuration',
+  FILTER_CONFIGURATION = 'filter-configuration',
+  TEST_PROMPT = 'test-prompt',
   MODEL_CONFIGURATION = 'model-configuration',
   PREVIEW_EXPORT = 'preview-export',
 }
@@ -11,11 +13,35 @@ export type OutputMode = 'overwrite' | 'append' | 'new-field';
 
 export type ModelProvider = 'gemini' | 'openai' | 'anthropic' | 'azure-openai';
 
+// Filter condition types
+export type FilterOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'exists'
+  | 'not_exists'
+  | 'array_size_gte'
+  | 'array_size_lte'
+  | 'array_size_eq'
+  | 'regex'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte';
+
+export interface FilterCondition {
+  id: string;
+  field: string;
+  operator: FilterOperator;
+  value: string | number | boolean;
+  enabled: boolean;
+}
+
 export interface WorkflowConfiguration {
   mongo: {
     uri: string;
     database: string;
     collection: string;
+    filter?: Record<string, unknown>;
   };
   input_fields: string[];
   output: {
@@ -39,6 +65,22 @@ export interface TestResult {
   modelOutput: string;
 }
 
+export interface SavedWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  namespace: string;
+  createdAt: string;
+  updatedAt: string;
+  config: Omit<WorkflowConfiguration, 'mongo'> & {
+    mongo: {
+      database: string;
+      collection: string;
+      filter?: Record<string, unknown>;
+    };
+  };
+}
+
 export interface WorkflowBuilderState {
   isOpen: boolean;
   currentStep: WorkflowBuilderStep;
@@ -53,10 +95,15 @@ export interface WorkflowBuilderState {
   executionLimit: number;
   mongoUri: string;
   maskedUri: string;
+  // Filter state
+  filterConditions: FilterCondition[];
   // Test state
   isTestLoading: boolean;
   testResult: TestResult | null;
   testError: string | null;
+  // Saved workflows
+  savedWorkflows: SavedWorkflow[];
+  selectedWorkflowId: string | null;
 }
 
 export const INITIAL_WORKFLOW_STATE: Omit<
@@ -68,12 +115,15 @@ export const INITIAL_WORKFLOW_STATE: Omit<
   outputField: '',
   outputMode: 'new-field',
   modelProvider: 'gemini',
-  modelName: 'gemini-2.0-flash',
+  modelName: 'gemini-3-flash-preview',
   temperature: 0.0,
   executionLimit: 5,
+  filterConditions: [],
   isTestLoading: false,
   testResult: null,
   testError: null,
+  savedWorkflows: [],
+  selectedWorkflowId: null,
 };
 
 export const MODEL_OPTIONS: Record<
@@ -82,7 +132,7 @@ export const MODEL_OPTIONS: Record<
 > = {
   gemini: {
     label: 'Google Gemini',
-    models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    models: ['gemini-3-flash-preview', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   },
   openai: {
     label: 'OpenAI',
@@ -97,6 +147,53 @@ export const MODEL_OPTIONS: Record<
     models: ['gpt-4', 'gpt-35-turbo'],
   },
 };
+
+export const FILTER_OPERATOR_OPTIONS: {
+  value: FilterOperator;
+  label: string;
+  description: string;
+}[] = [
+  { value: 'equals', label: 'Equals', description: 'Field equals value' },
+  {
+    value: 'not_equals',
+    label: 'Not Equals',
+    description: 'Field does not equal value',
+  },
+  { value: 'exists', label: 'Exists', description: 'Field exists' },
+  {
+    value: 'not_exists',
+    label: 'Does Not Exist',
+    description: 'Field does not exist',
+  },
+  {
+    value: 'array_size_gte',
+    label: 'Array Size ≥',
+    description: 'Array has at least N elements',
+  },
+  {
+    value: 'array_size_lte',
+    label: 'Array Size ≤',
+    description: 'Array has at most N elements',
+  },
+  {
+    value: 'array_size_eq',
+    label: 'Array Size =',
+    description: 'Array has exactly N elements',
+  },
+  {
+    value: 'regex',
+    label: 'Regex Match',
+    description: 'Field matches regex pattern',
+  },
+  { value: 'gt', label: 'Greater Than', description: 'Field > value' },
+  {
+    value: 'gte',
+    label: 'Greater Than or Equal',
+    description: 'Field ≥ value',
+  },
+  { value: 'lt', label: 'Less Than', description: 'Field < value' },
+  { value: 'lte', label: 'Less Than or Equal', description: 'Field ≤ value' },
+];
 
 // Helper to extract field names from prompt using @fieldname syntax
 export function extractFieldsFromPrompt(prompt: string): string[] {
@@ -130,4 +227,73 @@ export function maskMongoUri(uri: string): string {
   } catch {
     return uri;
   }
+}
+
+// Convert filter conditions to MongoDB filter object
+export function buildMongoFilter(
+  conditions: FilterCondition[]
+): Record<string, unknown> {
+  const filter: Record<string, unknown> = {};
+
+  for (const condition of conditions) {
+    if (!condition.enabled || !condition.field) continue;
+
+    switch (condition.operator) {
+      case 'equals':
+        filter[condition.field] = condition.value;
+        break;
+      case 'not_equals':
+        filter[condition.field] = { $ne: condition.value };
+        break;
+      case 'exists':
+        filter[condition.field] = { $exists: true };
+        break;
+      case 'not_exists':
+        filter[condition.field] = { $exists: false };
+        break;
+      case 'array_size_gte':
+        filter[`${condition.field}.${Number(condition.value) - 1}`] = {
+          $exists: true,
+        };
+        break;
+      case 'array_size_lte':
+        filter[`${condition.field}.${Number(condition.value)}`] = {
+          $exists: false,
+        };
+        break;
+      case 'array_size_eq':
+        filter[condition.field] = { $size: Number(condition.value) };
+        break;
+      case 'regex':
+        filter[condition.field] = {
+          $regex: String(condition.value),
+          $options: 'i',
+        };
+        break;
+      case 'gt':
+        filter[condition.field] = { $gt: Number(condition.value) };
+        break;
+      case 'gte':
+        filter[condition.field] = { $gte: Number(condition.value) };
+        break;
+      case 'lt':
+        filter[condition.field] = { $lt: Number(condition.value) };
+        break;
+      case 'lte':
+        filter[condition.field] = { $lte: Number(condition.value) };
+        break;
+    }
+  }
+
+  return filter;
+}
+
+// Generate unique ID for filter conditions
+export function generateFilterId(): string {
+  return `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Generate unique ID for saved workflows
+export function generateWorkflowId(): string {
+  return `workflow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }

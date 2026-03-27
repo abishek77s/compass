@@ -6,20 +6,15 @@ import React, {
   useEffect,
 } from 'react';
 import {
-  Body,
   Description,
   Label,
   spacing,
   css,
   Banner,
   KeylineCard,
-  Button,
-  SpinLoader,
 } from '@mongodb-js/compass-components';
 import type { Document } from 'mongodb';
 import { EJSON } from 'bson';
-import { extractFieldsFromPrompt, convertPromptToConfig } from './types';
-import { MITTAI_SERVER_URL } from './constants';
 
 const containerStyles = css({
   display: 'flex',
@@ -39,55 +34,12 @@ const twoColumnStyles = css({
 
 const documentCardStyles = css({
   padding: spacing[300],
-  maxHeight: '250px',
+  maxHeight: '300px',
   overflow: 'auto',
   fontFamily: 'monospace',
   fontSize: '12px',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-all',
-});
-
-const fieldTagsContainerStyles = css({
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: spacing[100],
-  marginTop: spacing[200],
-});
-
-const fieldTagStyles = css({
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: `${spacing[100]}px ${spacing[200]}px`,
-  backgroundColor: 'var(--palette-blue-light3)',
-  color: 'var(--palette-blue-dark2)',
-  borderRadius: spacing[100],
-  fontSize: '11px',
-  fontFamily: 'monospace',
-});
-
-const testSectionStyles = css({
-  marginTop: spacing[200],
-  padding: spacing[300],
-  backgroundColor: 'var(--palette-gray-light3)',
-  borderRadius: spacing[200],
-});
-
-const testResultStyles = css({
-  marginTop: spacing[200],
-  padding: spacing[300],
-  backgroundColor: 'var(--palette-white)',
-  borderRadius: spacing[100],
-  fontFamily: 'monospace',
-  fontSize: '12px',
-  whiteSpace: 'pre-wrap',
-  maxHeight: '150px',
-  overflow: 'auto',
-});
-
-const testButtonRowStyles = css({
-  display: 'flex',
-  alignItems: 'center',
-  gap: spacing[200],
 });
 
 const textAreaContainerStyles = css({
@@ -96,7 +48,7 @@ const textAreaContainerStyles = css({
 
 const textAreaStyles = css({
   width: '100%',
-  minHeight: '180px',
+  minHeight: '250px',
   fontFamily: 'monospace',
   fontSize: '13px',
   padding: spacing[200],
@@ -121,6 +73,9 @@ const suggestionsDropdownStyles = css({
   overflow: 'auto',
   zIndex: 1000,
   minWidth: '200px',
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
 });
 
 const suggestionItemStyles = css({
@@ -136,37 +91,6 @@ const suggestionItemStyles = css({
 const suggestionItemSelectedStyles = css({
   backgroundColor: 'var(--palette-blue-light3)',
 });
-
-const diffContainerStyles = css({
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: spacing[200],
-  marginTop: spacing[200],
-});
-
-const diffBoxStyles = css({
-  padding: spacing[200],
-  backgroundColor: 'var(--palette-white)',
-  borderRadius: spacing[100],
-  fontFamily: 'monospace',
-  fontSize: '11px',
-  whiteSpace: 'pre-wrap',
-  maxHeight: '120px',
-  overflow: 'auto',
-});
-
-const diffLabelStyles = css({
-  fontSize: '11px',
-  fontWeight: 600,
-  marginBottom: spacing[100],
-  color: 'var(--palette-gray-dark1)',
-});
-
-interface TestResult {
-  sampleDocument: Document | null;
-  builtPrompt: string;
-  modelOutput: string;
-}
 
 // Extract all field paths from a document recursively
 function extractFieldPaths(
@@ -198,30 +122,14 @@ function extractFieldPaths(
 interface PromptConfigurationScreenProps {
   prompt: string;
   sampleDocument: Document | null;
-  mongoUri: string;
-  namespace: string;
-  modelProvider: string;
-  modelName: string;
-  temperature: number;
-  outputField: string;
   onPromptChange: (prompt: string) => void;
 }
 
 const PromptConfigurationScreen: React.FC<PromptConfigurationScreenProps> = ({
   prompt,
   sampleDocument,
-  mongoUri,
-  namespace,
-  modelProvider,
-  modelName,
-  temperature,
-  outputField,
   onPromptChange,
 }) => {
-  const [isTestLoading, setIsTestLoading] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
-
   // Autocomplete state
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionFilter, setSuggestionFilter] = useState('');
@@ -232,7 +140,9 @@ const PromptConfigurationScreen: React.FC<PromptConfigurationScreenProps> = ({
 
   const availableFields = useMemo(() => {
     if (!sampleDocument) return [];
-    return extractFieldPaths(sampleDocument);
+    return extractFieldPaths(sampleDocument).filter(
+      (field) => !field.startsWith('_id')
+    );
   }, [sampleDocument]);
 
   const filteredSuggestions = useMemo(() => {
@@ -240,10 +150,6 @@ const PromptConfigurationScreen: React.FC<PromptConfigurationScreenProps> = ({
     const lower = suggestionFilter.toLowerCase();
     return availableFields.filter((f) => f.toLowerCase().includes(lower));
   }, [availableFields, suggestionFilter]);
-
-  const extractedFields = useMemo(() => {
-    return extractFieldsFromPrompt(prompt);
-  }, [prompt]);
 
   const formattedDocument = useMemo(() => {
     if (!sampleDocument) return 'No sample document available';
@@ -351,97 +257,6 @@ const PromptConfigurationScreen: React.FC<PromptConfigurationScreenProps> = ({
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleTestPrompt = useCallback(async () => {
-    if (!prompt.trim()) return;
-
-    setIsTestLoading(true);
-    setTestError(null);
-    setTestResult(null);
-
-    const [database, collection] = namespace.split('.');
-    const configPrompt = convertPromptToConfig(prompt);
-
-    try {
-      const response = await fetch(`${MITTAI_SERVER_URL}/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mongo: {
-            uri: mongoUri,
-            database: database || '',
-            collection: collection || '',
-          },
-          input_fields: extractedFields,
-          prompt: configPrompt,
-          model: {
-            provider: modelProvider,
-            name: modelName,
-            temperature: temperature,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Test request failed');
-      }
-
-      const result = await response.json();
-      setTestResult({
-        sampleDocument: result.sample_document,
-        builtPrompt: result.built_prompt,
-        modelOutput: result.model_output,
-      });
-    } catch (err) {
-      setTestError(err instanceof Error ? err.message : 'Test failed');
-    } finally {
-      setIsTestLoading(false);
-    }
-  }, [
-    prompt,
-    mongoUri,
-    namespace,
-    extractedFields,
-    modelProvider,
-    modelName,
-    temperature,
-  ]);
-
-  // Generate before/after preview
-  const beforeDoc = useMemo(() => {
-    if (!testResult?.sampleDocument) return null;
-    try {
-      // Show only first few fields for brevity
-      const doc = testResult.sampleDocument;
-      const keys = Object.keys(doc).slice(0, 3);
-      const preview: Record<string, unknown> = {};
-      keys.forEach((k) => (preview[k] = doc[k]));
-      if (Object.keys(doc).length > 3) preview['...'] = '...';
-      return JSON.stringify(preview, null, 2);
-    } catch {
-      return null;
-    }
-  }, [testResult]);
-
-  const afterDoc = useMemo(() => {
-    if (!testResult?.sampleDocument || !testResult?.modelOutput || !outputField)
-      return null;
-    try {
-      const doc = testResult.sampleDocument;
-      const keys = Object.keys(doc).slice(0, 3);
-      const preview: Record<string, unknown> = {};
-      keys.forEach((k) => (preview[k] = doc[k]));
-      if (Object.keys(doc).length > 3) preview['...'] = '...';
-      // Add the new field with truncated output
-      const output = testResult.modelOutput;
-      preview[outputField] =
-        output.length > 50 ? output.substring(0, 50) + '...' : output;
-      return JSON.stringify(preview, null, 2);
-    } catch {
-      return null;
-    }
-  }, [testResult, outputField]);
-
   return (
     <div className={containerStyles}>
       <Banner variant="info">
@@ -499,16 +314,6 @@ const PromptConfigurationScreen: React.FC<PromptConfigurationScreenProps> = ({
               </ul>
             )}
           </div>
-
-          {extractedFields.length > 0 && (
-            <div className={fieldTagsContainerStyles}>
-              {extractedFields.map((field) => (
-                <span key={field} className={fieldTagStyles}>
-                  @{field}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         <div>
@@ -520,58 +325,6 @@ const PromptConfigurationScreen: React.FC<PromptConfigurationScreenProps> = ({
             {formattedDocument}
           </KeylineCard>
         </div>
-      </div>
-
-      <div className={testSectionStyles}>
-        <div className={testButtonRowStyles}>
-          <Button
-            id="test-button"
-            variant="primary"
-            size="small"
-            onClick={() => void handleTestPrompt()}
-            disabled={!prompt.trim() || isTestLoading}
-          >
-            {isTestLoading ? (
-              <>
-                <SpinLoader /> Testing...
-              </>
-            ) : (
-              'Test Prompt'
-            )}
-          </Button>
-          {testError && (
-            <Body
-              style={{ color: 'var(--palette-red-base)', fontSize: '12px' }}
-            >
-              {testError}
-            </Body>
-          )}
-        </div>
-
-        {testResult && (
-          <>
-            <Body
-              weight="medium"
-              style={{ marginTop: spacing[200], fontSize: '12px' }}
-            >
-              Model Output:
-            </Body>
-            <div className={testResultStyles}>{testResult.modelOutput}</div>
-
-            {beforeDoc && afterDoc && outputField && (
-              <div className={diffContainerStyles}>
-                <div>
-                  <div className={diffLabelStyles}>Before</div>
-                  <div className={diffBoxStyles}>{beforeDoc}</div>
-                </div>
-                <div>
-                  <div className={diffLabelStyles}>After (+ {outputField})</div>
-                  <div className={diffBoxStyles}>{afterDoc}</div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ export const WORKFLOW_BUILDER_STEP_LABELS: Record<WorkflowBuilderStep, string> =
   {
     [WorkflowBuilderStep.PROMPT_CONFIGURATION]: 'Write Prompt',
     [WorkflowBuilderStep.OUTPUT_CONFIGURATION]: 'Configure Output',
+    [WorkflowBuilderStep.FILTER_CONFIGURATION]: 'Define Filters',
+    [WorkflowBuilderStep.TEST_PROMPT]: 'Test Prompt',
     [WorkflowBuilderStep.MODEL_CONFIGURATION]: 'Configure Model',
     [WorkflowBuilderStep.PREVIEW_EXPORT]: 'Preview & Deploy',
   };
@@ -11,13 +13,17 @@ export const WORKFLOW_BUILDER_STEP_LABELS: Record<WorkflowBuilderStep, string> =
 export const WORKFLOW_BUILDER_STEP_ORDER: WorkflowBuilderStep[] = [
   WorkflowBuilderStep.PROMPT_CONFIGURATION,
   WorkflowBuilderStep.OUTPUT_CONFIGURATION,
+  WorkflowBuilderStep.FILTER_CONFIGURATION,
+  WorkflowBuilderStep.TEST_PROMPT,
   WorkflowBuilderStep.MODEL_CONFIGURATION,
   WorkflowBuilderStep.PREVIEW_EXPORT,
 ];
 
 export const NEXT_BUTTON_TEXT: Record<WorkflowBuilderStep, string> = {
   [WorkflowBuilderStep.PROMPT_CONFIGURATION]: 'Next: Configure Output',
-  [WorkflowBuilderStep.OUTPUT_CONFIGURATION]: 'Next: Configure Model',
+  [WorkflowBuilderStep.OUTPUT_CONFIGURATION]: 'Next: Define Filters',
+  [WorkflowBuilderStep.FILTER_CONFIGURATION]: 'Next: Test Prompt',
+  [WorkflowBuilderStep.TEST_PROMPT]: 'Next: Configure Model',
   [WorkflowBuilderStep.MODEL_CONFIGURATION]: 'Next: Preview',
   [WorkflowBuilderStep.PREVIEW_EXPORT]: 'Close',
 };
@@ -36,3 +42,5 @@ export const TEMPERATURE_MARKS = [
 ];
 
 export const MITTAI_SERVER_URL = 'http://localhost:8787';
+
+export const SAVED_WORKFLOWS_STORAGE_KEY = 'compass-workflow-builder-saved';

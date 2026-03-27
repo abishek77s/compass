@@ -7,9 +7,20 @@ import {
   Button,
   Icon,
   Banner,
+  TextInput,
+  TextArea,
 } from '@mongodb-js/compass-components';
-import type { WorkflowConfiguration } from './types';
-import { convertPromptToConfig, extractFieldsFromPrompt } from './types';
+import { useOpenWorkspace } from '@mongodb-js/compass-workspaces/provider';
+import type {
+  WorkflowConfiguration,
+  FilterCondition,
+  SavedWorkflow,
+} from './types';
+import {
+  convertPromptToConfig,
+  extractFieldsFromPrompt,
+  buildMongoFilter,
+} from './types';
 
 const containerStyles = css({
   display: 'flex',
@@ -65,6 +76,51 @@ const buttonRowStyles = css({
   marginTop: spacing[200],
 });
 
+const saveFormStyles = css({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: spacing[200],
+  padding: spacing[300],
+  backgroundColor: 'var(--palette-gray-light3)',
+  borderRadius: spacing[200],
+  marginTop: spacing[200],
+});
+
+const saveFormRowStyles = css({
+  display: 'flex',
+  gap: spacing[200],
+  alignItems: 'flex-end',
+});
+
+const savedWorkflowsListStyles = css({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: spacing[100],
+  marginTop: spacing[200],
+  maxHeight: '150px',
+  overflow: 'auto',
+});
+
+const savedWorkflowItemStyles = css({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: spacing[200],
+  backgroundColor: 'var(--palette-white)',
+  border: '1px solid var(--palette-gray-light2)',
+  borderRadius: spacing[100],
+  fontSize: '12px',
+});
+
+const savedWorkflowNameStyles = css({
+  fontWeight: 600,
+});
+
+const savedWorkflowDateStyles = css({
+  color: 'var(--palette-gray-base)',
+  fontSize: '11px',
+});
+
 interface PreviewExportScreenProps {
   prompt: string;
   outputField: string;
@@ -76,6 +132,9 @@ interface PreviewExportScreenProps {
   mongoUri: string;
   maskedUri: string;
   namespace: string;
+  filterConditions: FilterCondition[];
+  onSaveWorkflow: (name: string, description: string) => void;
+  savedWorkflows: SavedWorkflow[];
 }
 
 const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
@@ -89,12 +148,21 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
   mongoUri,
   maskedUri,
   namespace,
+  filterConditions,
+  onSaveWorkflow,
+  savedWorkflows,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [workflowName, setWorkflowName] = useState('');
+  const [workflowDescription, setWorkflowDescription] = useState('');
+  const [saved, setSaved] = useState(false);
+  const { openManageWorkflowsWorkspace } = useOpenWorkspace();
 
   const [database, collection] = namespace.split('.');
   const inputFields = extractFieldsFromPrompt(prompt);
   const configPrompt = convertPromptToConfig(prompt);
+  const mongoFilter = buildMongoFilter(filterConditions);
 
   const configuration: WorkflowConfiguration = useMemo(
     () => ({
@@ -102,6 +170,7 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         uri: mongoUri,
         database: database || '',
         collection: collection || '',
+        filter: Object.keys(mongoFilter).length > 0 ? mongoFilter : undefined,
       },
       input_fields: inputFields,
       output: {
@@ -122,6 +191,7 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
       mongoUri,
       database,
       collection,
+      mongoFilter,
       inputFields,
       outputField,
       outputMode,
@@ -148,6 +218,12 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
     return JSON.stringify(displayConfiguration, null, 2);
   }, [displayConfiguration]);
 
+  const filterSummary = useMemo(() => {
+    const enabledFilters = filterConditions.filter((c) => c.enabled);
+    if (enabledFilters.length === 0) return 'No filter (all documents)';
+    return JSON.stringify(mongoFilter);
+  }, [filterConditions, mongoFilter]);
+
   const handleCopyConfig = useCallback(() => {
     // Copy with real URI
     const fullConfig = JSON.stringify(configuration, null, 2);
@@ -163,11 +239,36 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
     console.log('Deploy clicked - TODO');
   }, []);
 
+  const handleSaveWorkflow = useCallback(() => {
+    if (!workflowName.trim()) return;
+
+    onSaveWorkflow(workflowName.trim(), workflowDescription.trim());
+    setSaved(true);
+    setShowSaveForm(false);
+    setWorkflowName('');
+    setWorkflowDescription('');
+    setTimeout(() => setSaved(false), 3000);
+  }, [workflowName, workflowDescription, onSaveWorkflow]);
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   return (
     <div className={containerStyles}>
       <Banner variant="success">
         <strong>Workflow Configuration Complete!</strong> Review your
-        configuration below, then copy or deploy it.
+        configuration below, then save, copy, or deploy it.
       </Banner>
 
       <div>
@@ -190,6 +291,9 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
           <div className={summaryValueStyles}>
             {outputField} ({outputMode})
           </div>
+
+          <div className={summaryLabelStyles}>Filter:</div>
+          <div className={summaryValueStyles}>{filterSummary}</div>
 
           <div className={summaryLabelStyles}>Model:</div>
           <div className={summaryValueStyles}>
@@ -231,6 +335,20 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         </Button>
         <Button
           variant="primaryOutline"
+          leftGlyph={<Icon glyph="Save" />}
+          onClick={() => setShowSaveForm(!showSaveForm)}
+        >
+          Save Workflow
+        </Button>
+        <Button
+          variant="primaryOutline"
+          leftGlyph={<Icon glyph="Diagram" />}
+          onClick={() => openManageWorkflowsWorkspace()}
+        >
+          Manage Workflows
+        </Button>
+        <Button
+          variant="primaryOutline"
           leftGlyph={<Icon glyph="Cloud" />}
           onClick={handleDeploy}
         >
@@ -238,10 +356,76 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         </Button>
       </div>
 
+      {showSaveForm && (
+        <div className={saveFormStyles}>
+          <Label htmlFor="workflow-name">Save Workflow</Label>
+          <TextInput
+            id="workflow-name"
+            aria-label="Workflow name"
+            placeholder="My Workflow"
+            value={workflowName}
+            onChange={(e) => setWorkflowName(e.target.value)}
+            sizeVariant="small"
+          />
+          <TextArea
+            id="workflow-description"
+            aria-labelledby="workflow-name"
+            placeholder="Optional description..."
+            value={workflowDescription}
+            onChange={(e) => setWorkflowDescription(e.target.value)}
+          />
+          <div className={saveFormRowStyles}>
+            <Button
+              variant="primary"
+              size="small"
+              onClick={handleSaveWorkflow}
+              disabled={!workflowName.trim()}
+            >
+              Save
+            </Button>
+            <Button
+              variant="default"
+              size="small"
+              onClick={() => setShowSaveForm(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {saved && <Banner variant="success">Workflow saved successfully!</Banner>}
+
       {copied && (
         <Banner variant="success">
           Configuration copied to clipboard! (with full MongoDB URI)
         </Banner>
+      )}
+
+      {savedWorkflows.length > 0 && (
+        <div>
+          <Label htmlFor="saved-workflows-list">Saved Workflows</Label>
+          <Description className={descriptionStyles}>
+            Previously saved workflows for this collection.
+          </Description>
+          <div id="saved-workflows-list" className={savedWorkflowsListStyles}>
+            {savedWorkflows.map((workflow) => (
+              <div key={workflow.id} className={savedWorkflowItemStyles}>
+                <div>
+                  <div className={savedWorkflowNameStyles}>{workflow.name}</div>
+                  {workflow.description && (
+                    <div style={{ color: 'var(--palette-gray-dark1)' }}>
+                      {workflow.description}
+                    </div>
+                  )}
+                  <div className={savedWorkflowDateStyles}>
+                    Saved: {formatDate(workflow.updatedAt)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <Banner variant="warning">

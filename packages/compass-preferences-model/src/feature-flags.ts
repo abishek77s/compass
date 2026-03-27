@@ -151,6 +151,18 @@ export const FEATURE_FLAG_DEFINITIONS = [
     },
   },
 
+  /**
+   * Feature flag for AI Workflow Management
+   */
+  {
+    name: 'enableWorkflowManagement',
+    stage: 'development',
+    atlasCloudFeatureFlagName: null,
+    description: {
+      short: 'Enable AI Workflow Management for managing saved workflows',
+    },
+  },
+
   {
     name: 'enableContextMenus',
     stage: 'released',

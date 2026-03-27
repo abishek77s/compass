@@ -7,6 +7,7 @@ export type AnyWorkspacePlugin =
   | WorkspacePlugin<'Welcome'>
   | WorkspacePlugin<'My Queries'>
   | WorkspacePlugin<'Data Modeling'>
+  | WorkspacePlugin<'Manage Workflows'>
   | WorkspacePlugin<'Shell'>
   | WorkspacePlugin<'Performance'>
   | WorkspacePlugin<'Databases'>

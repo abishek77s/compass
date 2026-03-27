@@ -213,6 +213,7 @@ export type {
   WelcomeWorkspace,
   MyQueriesWorkspace,
   DataModelingWorkspace,
+  ManageWorkflowsWorkspace,
   ServerStatsWorkspace,
   ShellWorkspace,
   DatabasesWorkspace,

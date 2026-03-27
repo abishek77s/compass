@@ -6,10 +6,15 @@ import { telemetryLocator } from '@mongodb-js/compass-telemetry/provider';
 import { createLoggerLocator } from '@mongodb-js/compass-logging/provider';
 import type { WorkspacePlugin } from '@mongodb-js/compass-workspaces';
 import DataModelingComponent from './components/data-modeling';
+import ManageWorkflowsScreen from './components/manage-workflows-screen';
 import { mongoDBInstancesManagerLocator } from '@mongodb-js/compass-app-stores/provider';
 import { dataModelStorageServiceLocator } from './provider';
 import { activateDataModelingStore } from './store';
 import { PluginTabTitleComponent, WorkspaceName } from './plugin-tab-title';
+import {
+  PluginTabTitleComponent as ManageWorkflowsTabTitle,
+  WorkspaceName as ManageWorkflowsWorkspaceName,
+} from './components/manage-workflows-tab-title';
 
 const CompassDataModelingPluginProvider = registerCompassPlugin(
   {
@@ -34,4 +39,26 @@ export const DataModelingWorkspaceTab: WorkspacePlugin<typeof WorkspaceName> = {
   provider: CompassDataModelingPluginProvider,
   content: DataModelingComponent,
   header: PluginTabTitleComponent,
+};
+
+const ManageWorkflowsPluginProvider = registerCompassPlugin(
+  {
+    name: 'ManageWorkflows',
+    component: function ManageWorkflowsProvider({ children }) {
+      return React.createElement(React.Fragment, null, children);
+    },
+    activate(_initialProps, _services, { cleanup }) {
+      return { store: {}, deactivate: cleanup };
+    },
+  },
+  {}
+);
+
+export const ManageWorkflowsWorkspaceTab: WorkspacePlugin<
+  typeof ManageWorkflowsWorkspaceName
+> = {
+  name: ManageWorkflowsWorkspaceName,
+  provider: ManageWorkflowsPluginProvider,
+  content: ManageWorkflowsScreen,
+  header: ManageWorkflowsTabTitle,
 };

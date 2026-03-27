@@ -646,6 +646,7 @@ export type OpenWorkspaceOptions =
   | Pick<Workspace<'Welcome'>, 'type'>
   | Pick<Workspace<'My Queries'>, 'type'>
   | Pick<Workspace<'Data Modeling'>, 'type'>
+  | Pick<Workspace<'Manage Workflows'>, 'type'>
   | Pick<
       Workspace<'Shell'>,
       'type' | 'connectionId' | 'initialEvaluate' | 'initialInput'

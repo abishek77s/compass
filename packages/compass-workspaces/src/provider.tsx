@@ -44,6 +44,11 @@ export type WorkspacesService = {
   openDataModelingWorkspace(this: void): void;
 
   /**
+   * Open "Manage Workflows" workspace
+   */
+  openManageWorkflowsWorkspace(this: void): void;
+
+  /**
    * Open "Shell" workspace
    */
   openShellWorkspace(
@@ -206,6 +211,7 @@ const noopWorkspacesService = {
   },
   openMyQueriesWorkspace: throwIfNotTestEnv,
   openDataModelingWorkspace: throwIfNotTestEnv,
+  openManageWorkflowsWorkspace: throwIfNotTestEnv,
   openShellWorkspace: throwIfNotTestEnv,
   openDatabasesWorkspace: throwIfNotTestEnv,
   openPerformanceWorkspace: throwIfNotTestEnv,
@@ -251,6 +257,16 @@ export const WorkspacesServiceProvider: React.FunctionComponent<{
               // Data Modeling tab is a special case, we always want to open it
               // in a new tab to make it easier for users to create / open new
               // diagrams
+              newTab: true,
+            }
+          )
+        );
+      },
+      openManageWorkflowsWorkspace: () => {
+        return void store.dispatch(
+          openWorkspaceAction(
+            { type: 'Manage Workflows' },
+            {
               newTab: true,
             }
           )
@@ -347,6 +363,7 @@ export function useOpenWorkspace() {
     openDatabasesWorkspace,
     openMyQueriesWorkspace,
     openDataModelingWorkspace,
+    openManageWorkflowsWorkspace,
     openPerformanceWorkspace,
     openEditViewWorkspace,
   } = useWorkspacesService();
@@ -358,6 +375,7 @@ export function useOpenWorkspace() {
     openDatabasesWorkspace,
     openMyQueriesWorkspace,
     openDataModelingWorkspace,
+    openManageWorkflowsWorkspace,
     openPerformanceWorkspace,
     openEditViewWorkspace,
   });

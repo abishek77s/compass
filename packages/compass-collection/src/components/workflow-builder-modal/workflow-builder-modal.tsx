@@ -10,7 +10,12 @@ import {
   palette,
 } from '@mongodb-js/compass-components';
 
-import type { WorkflowBuilderState, OutputMode, ModelProvider } from './types';
+import type {
+  WorkflowBuilderState,
+  OutputMode,
+  ModelProvider,
+  FilterCondition,
+} from './types';
 import { WorkflowBuilderStep } from './types';
 import {
   WORKFLOW_BUILDER_STEP_LABELS,
@@ -20,6 +25,8 @@ import {
 
 import PromptConfigurationScreen from './prompt-configuration-screen';
 import OutputConfigurationScreen from './output-configuration-screen';
+import FilterConfigurationScreen from './filter-configuration-screen';
+import TestPromptScreen from './test-prompt-screen';
 import ModelConfigurationScreen from './model-configuration-screen';
 import PreviewExportScreen from './preview-export-screen';
 
@@ -176,6 +183,8 @@ export interface WorkflowBuilderModalProps {
   onModelNameChange: (name: string) => void;
   onTemperatureChange: (temp: number) => void;
   onExecutionLimitChange: (limit: number) => void;
+  onFilterConditionsChange: (conditions: FilterCondition[]) => void;
+  onSaveWorkflow: (name: string, description: string) => void;
 }
 
 const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
@@ -190,6 +199,8 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
   onModelNameChange,
   onTemperatureChange,
   onExecutionLimitChange,
+  onFilterConditionsChange,
+  onSaveWorkflow,
 }) => {
   const currentStepIndex = WORKFLOW_BUILDER_STEP_ORDER.indexOf(
     state.currentStep
@@ -202,12 +213,6 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
           <PromptConfigurationScreen
             prompt={state.prompt}
             sampleDocument={state.sampleDocument}
-            mongoUri={state.mongoUri}
-            namespace={state.namespace}
-            modelProvider={state.modelProvider}
-            modelName={state.modelName}
-            temperature={state.temperature}
-            outputField={state.outputField}
             onPromptChange={onPromptChange}
           />
         );
@@ -218,6 +223,28 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
             outputMode={state.outputMode}
             onOutputFieldChange={onOutputFieldChange}
             onOutputModeChange={onOutputModeChange}
+          />
+        );
+      case WorkflowBuilderStep.FILTER_CONFIGURATION:
+        return (
+          <FilterConfigurationScreen
+            filterConditions={state.filterConditions}
+            sampleDocument={state.sampleDocument}
+            onFilterConditionsChange={onFilterConditionsChange}
+          />
+        );
+      case WorkflowBuilderStep.TEST_PROMPT:
+        return (
+          <TestPromptScreen
+            prompt={state.prompt}
+            outputField={state.outputField}
+            filterConditions={state.filterConditions}
+            sampleDocument={state.sampleDocument}
+            mongoUri={state.mongoUri}
+            namespace={state.namespace}
+            modelProvider={state.modelProvider}
+            modelName={state.modelName}
+            temperature={state.temperature}
           />
         );
       case WorkflowBuilderStep.MODEL_CONFIGURATION:
@@ -246,6 +273,9 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
             mongoUri={state.mongoUri}
             maskedUri={state.maskedUri}
             namespace={state.namespace}
+            filterConditions={state.filterConditions}
+            onSaveWorkflow={onSaveWorkflow}
+            savedWorkflows={state.savedWorkflows}
           />
         );
     }
@@ -258,6 +288,8 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
     onModelNameChange,
     onTemperatureChange,
     onExecutionLimitChange,
+    onFilterConditionsChange,
+    onSaveWorkflow,
   ]);
 
   const isNextButtonDisabled = useMemo(() => {
@@ -266,6 +298,10 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
         return !state.prompt.trim();
       case WorkflowBuilderStep.OUTPUT_CONFIGURATION:
         return !state.outputField.trim();
+      case WorkflowBuilderStep.FILTER_CONFIGURATION:
+        return false; // Filters are optional
+      case WorkflowBuilderStep.TEST_PROMPT:
+        return false; // Testing is optional
       case WorkflowBuilderStep.MODEL_CONFIGURATION:
         return !state.modelProvider || !state.modelName;
       case WorkflowBuilderStep.PREVIEW_EXPORT:
