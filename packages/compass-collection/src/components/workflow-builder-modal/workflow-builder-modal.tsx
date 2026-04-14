@@ -185,6 +185,7 @@ export interface WorkflowBuilderModalProps {
   onExecutionLimitChange: (limit: number) => void;
   onFilterConditionsChange: (conditions: FilterCondition[]) => void;
   onSaveWorkflow: (name: string, description: string) => void;
+  onDeployWorkflow: (name: string, description: string) => Promise<void>;
 }
 
 const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
@@ -201,6 +202,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
   onExecutionLimitChange,
   onFilterConditionsChange,
   onSaveWorkflow,
+  onDeployWorkflow,
 }) => {
   const currentStepIndex = WORKFLOW_BUILDER_STEP_ORDER.indexOf(
     state.currentStep
@@ -275,6 +277,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
             namespace={state.namespace}
             filterConditions={state.filterConditions}
             onSaveWorkflow={onSaveWorkflow}
+            onDeployWorkflow={onDeployWorkflow}
             savedWorkflows={state.savedWorkflows}
           />
         );
@@ -290,6 +293,7 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
     onExecutionLimitChange,
     onFilterConditionsChange,
     onSaveWorkflow,
+    onDeployWorkflow,
   ]);
 
   const isNextButtonDisabled = useMemo(() => {

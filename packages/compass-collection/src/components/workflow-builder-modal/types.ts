@@ -36,6 +36,17 @@ export interface FilterCondition {
   enabled: boolean;
 }
 
+export type Condition =
+  | { type: 'regex'; field: string; pattern: string }
+  | {
+      type: 'array_length';
+      field: string;
+      operator: '>' | '>=' | '<' | '<=' | '==';
+      value: number;
+    }
+  | { type: 'exists'; field: string }
+  | { type: 'not_empty'; field: string };
+
 export interface WorkflowConfiguration {
   mongo: {
     uri: string;
@@ -47,13 +58,18 @@ export interface WorkflowConfiguration {
   output: {
     field: string;
     mode: OutputMode;
+    status_field?: string;
+    status_value?: unknown;
   };
   prompt: string;
   model: {
     provider: ModelProvider;
     name: string;
     temperature: number;
+    api_key?: string;
   };
+  conditions?: Condition[];
+  schedule?: string;
   execution: {
     limit?: number;
   };
@@ -63,17 +79,20 @@ export interface TestResult {
   sampleDocument: Document | null;
   builtPrompt: string;
   modelOutput: string;
+  conditionsPassed?: boolean;
 }
 
 export interface SavedWorkflow {
   id: string;
+  user_id?: string;
   name: string;
   description: string;
-  namespace: string;
-  createdAt: string;
-  updatedAt: string;
-  config: Omit<WorkflowConfiguration, 'mongo'> & {
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  config: WorkflowConfiguration & {
     mongo: {
+      uri?: string;
       database: string;
       collection: string;
       filter?: Record<string, unknown>;
@@ -115,7 +134,7 @@ export const INITIAL_WORKFLOW_STATE: Omit<
   outputField: '',
   outputMode: 'new-field',
   modelProvider: 'gemini',
-  modelName: 'gemini-3-flash-preview',
+  modelName: 'gemini-3.1-flash-lite-preview',
   temperature: 0.0,
   executionLimit: 5,
   filterConditions: [],
@@ -132,7 +151,13 @@ export const MODEL_OPTIONS: Record<
 > = {
   gemini: {
     label: 'Google Gemini',
-    models: ['gemini-3-flash-preview', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    models: [
+      'gemini-3.1-flash-lite-preview',
+      'gemini-2.5-flash-preview-05-20',
+      'gemini-2.5-pro-preview-06-05',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+    ],
   },
   openai: {
     label: 'OpenAI',

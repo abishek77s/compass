@@ -168,6 +168,32 @@ const errorStyles = css({
   fontSize: '13px',
 });
 
+const conditionsPassedBadgeStyles = css({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: spacing[100],
+  padding: `${spacing[100]}px ${spacing[200]}px`,
+  borderRadius: spacing[200],
+  fontSize: '13px',
+  fontWeight: 600,
+  backgroundColor: palette.green.light2,
+  color: palette.green.dark2,
+  border: `1px solid ${palette.green.base}`,
+});
+
+const conditionsFailedBadgeStyles = css({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: spacing[100],
+  padding: `${spacing[100]}px ${spacing[200]}px`,
+  borderRadius: spacing[200],
+  fontSize: '13px',
+  fontWeight: 600,
+  backgroundColor: palette.yellow.light2,
+  color: palette.yellow.dark2,
+  border: `1px solid ${palette.yellow.base}`,
+});
+
 interface TestPromptScreenProps {
   prompt: string;
   outputField: string;
@@ -232,15 +258,36 @@ const TestPromptScreen: React.FC<TestPromptScreenProps> = ({
         },
       };
 
-      const response = await fetch(`${MITTAI_SERVER_URL}/test`, {
+      // Read the stored mittai JWT so the protected endpoint accepts the request.
+      let mittaiToken: string | null = null;
+      try {
+        const raw = localStorage.getItem('mittai_auth');
+        if (raw) {
+          const parsed = JSON.parse(raw) as { token?: string };
+          mittaiToken = parsed.token ?? null;
+        }
+      } catch {
+        // ignore — proceed without token (server will return 401 with a clear message)
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (mittaiToken) {
+        headers['Authorization'] = `Bearer ${mittaiToken}`;
+      }
+
+      const response = await fetch(`${MITTAI_SERVER_URL}/workflow/test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Test request failed');
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errorData.error ?? 'Test request failed');
       }
 
       const result = await response.json();
@@ -248,6 +295,7 @@ const TestPromptScreen: React.FC<TestPromptScreenProps> = ({
         sampleDocument: result.sample_document,
         builtPrompt: result.built_prompt,
         modelOutput: result.model_output,
+        conditionsPassed: result.conditions_passed,
       });
     } catch (err) {
       setTestError(err instanceof Error ? err.message : 'Test failed');
@@ -395,6 +443,21 @@ const TestPromptScreen: React.FC<TestPromptScreenProps> = ({
       {/* Test Results */}
       {testResult && (
         <div className={resultContainerStyles}>
+          {/* Conditions Badge */}
+          {testResult.conditionsPassed !== undefined && (
+            <div>
+              {testResult.conditionsPassed ? (
+                <span className={conditionsPassedBadgeStyles}>
+                  Conditions Passed ✓
+                </span>
+              ) : (
+                <span className={conditionsFailedBadgeStyles}>
+                  Conditions Failed ✗
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Built Prompt */}
           <div>
             <Label htmlFor="built-prompt">Built Prompt</Label>

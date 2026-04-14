@@ -312,9 +312,10 @@ interface WorkflowBuilderLoadWorkflowAction {
     id: string;
     name: string;
     description: string;
-    namespace: string;
+    is_active: boolean;
     config: {
       mongo: {
+        uri: string;
         database: string;
         collection: string;
         filter?: Record<string, unknown>;
@@ -326,7 +327,10 @@ interface WorkflowBuilderLoadWorkflowAction {
         provider: 'gemini' | 'openai' | 'anthropic' | 'azure-openai';
         name: string;
         temperature: number;
+        api_key?: string;
       };
+      conditions?: unknown[];
+      schedule?: string;
       execution: { limit?: number };
     };
   };
@@ -806,7 +810,7 @@ const reducer: Reducer<CollectionState, Action> = (
         outputField: '',
         outputMode: 'new-field',
         modelProvider: 'gemini',
-        modelName: 'gemini-3-flash-preview',
+        modelName: 'gemini-3.1-flash-lite-preview',
         temperature: 0.0,
         executionLimit: 5,
         mongoUri: action.mongoUri,
@@ -1412,60 +1416,200 @@ export const workflowBuilderFilterConditionsChanged = (
   conditions,
 });
 
+// Helper: read the stored mittai JWT from localStorage (set by ManageWorkflowsScreen).
+function getMittaiToken(): string | null {
+  try {
+    const raw = localStorage.getItem('mittai_auth');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { token?: string };
+    return parsed.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Build the workflow config payload shared by save & deploy.
+function buildWorkflowPayload(
+  name: string,
+  description: string,
+  isActive: boolean,
+  wb: {
+    mongoUri: string;
+    prompt: string;
+    outputField: string;
+    outputMode: string;
+    modelProvider: string;
+    modelName: string;
+    temperature: number;
+    executionLimit: number;
+  },
+  namespace: string
+) {
+  const [database, collection] = namespace.split('.');
+  return {
+    name,
+    description,
+    is_active: isActive,
+    config: {
+      mongo: {
+        uri: wb.mongoUri,
+        database: database || '',
+        collection: collection || '',
+      },
+      input_fields:
+        wb.prompt
+          .match(/\{\{([\w.]+)\}\}/g)
+          ?.map((m) => m.replace(/\{\{|\}\}/g, '')) ?? [],
+      output: {
+        field: wb.outputField,
+        mode: wb.outputMode,
+      },
+      prompt: wb.prompt,
+      model: {
+        provider: wb.modelProvider,
+        name: wb.modelName,
+        temperature: wb.temperature,
+        api_key: '',
+      },
+      execution: {
+        limit: wb.executionLimit > 0 ? wb.executionLimit : undefined,
+      },
+    },
+  };
+}
+
 export const workflowBuilderSaveWorkflow = (
   name: string,
   description: string
-): CollectionThunkAction<void, WorkflowBuilderSaveWorkflowAction> => {
-  return (dispatch, getState) => {
-    // Dispatch to Redux immediately for local state update
+): CollectionThunkAction<
+  Promise<string | null>,
+  WorkflowBuilderSaveWorkflowAction
+> => {
+  return async (dispatch, getState) => {
+    // Dispatch to Redux immediately for optimistic local state update
     dispatch({
       type: CollectionActions.WorkflowBuilderSaveWorkflow,
       name,
       description,
     });
 
-    // Also persist to the mittai backend
     const state = getState();
-    if (!state.workflowBuilder) return;
+    if (!state.workflowBuilder) return null;
 
-    const wb = state.workflowBuilder;
-    const [database, collection] = state.namespace.split('.');
+    const token = getMittaiToken();
+    if (!token) {
+      // eslint-disable-next-line no-console
+      console.warn('Cannot save workflow: not logged in to Mittai');
+      return null;
+    }
 
-    const payload = {
+    const payload = buildWorkflowPayload(
       name,
       description,
-      namespace: state.namespace,
-      config: {
-        mongo: {
-          database: database || '',
-          collection: collection || '',
-        },
-        input_fields: [] as string[],
-        output: {
-          field: wb.outputField,
-          mode: wb.outputMode,
-        },
-        prompt: wb.prompt,
-        model: {
-          provider: wb.modelProvider,
-          name: wb.modelName,
-          temperature: wb.temperature,
-        },
-        execution: {
-          limit: wb.executionLimit > 0 ? wb.executionLimit : undefined,
-        },
-      },
-    };
+      false, // saved as inactive (draft) by default
+      state.workflowBuilder,
+      state.namespace
+    );
 
-    // Fire-and-forget POST to mittai server
-    void fetch('http://localhost:8787/workflows', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch((err) => {
+    try {
+      const response = await fetch('http://localhost:8787/workflow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        // eslint-disable-next-line no-console
+        console.warn(
+          'Failed to save workflow to mittai server:',
+          errData.error ?? response.statusText
+        );
+        return null;
+      }
+
+      const created = (await response.json()) as { id?: string };
+      return created.id ?? null;
+    } catch (err) {
       // eslint-disable-next-line no-console
       console.warn('Failed to save workflow to mittai server:', err);
-    });
+      return null;
+    }
+  };
+};
+
+/**
+ * Deploy a workflow: POST it as active (is_active: true), or if it was
+ * already saved as a draft (workflowId provided), PATCH it to activate.
+ */
+export const workflowBuilderDeployWorkflow = (
+  name: string,
+  description: string,
+  existingWorkflowId?: string | null
+): CollectionThunkAction<Promise<boolean>> => {
+  return async (dispatch, getState) => {
+    const state = getState();
+    if (!state.workflowBuilder) return false;
+
+    const token = getMittaiToken();
+    if (!token) {
+      // eslint-disable-next-line no-console
+      console.warn('Cannot deploy workflow: not logged in to Mittai');
+      return false;
+    }
+
+    try {
+      if (existingWorkflowId) {
+        // Already saved as a draft — just PATCH is_active: true
+        const response = await fetch(
+          `http://localhost:8787/workflow/${existingWorkflowId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ is_active: true }),
+          }
+        );
+        return response.ok;
+      }
+
+      // Not yet saved — POST directly as active
+      dispatch({
+        type: CollectionActions.WorkflowBuilderSaveWorkflow,
+        name,
+        description,
+      });
+
+      const payload = buildWorkflowPayload(
+        name,
+        description,
+        true, // deploy = active
+        state.workflowBuilder,
+        state.namespace
+      );
+
+      const response = await fetch('http://localhost:8787/workflow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      return response.ok;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to deploy workflow:', err);
+      return false;
+    }
   };
 };
 

@@ -9,6 +9,7 @@ import {
   Banner,
   TextInput,
   TextArea,
+  SpinLoader,
 } from '@mongodb-js/compass-components';
 import { useOpenWorkspace } from '@mongodb-js/compass-workspaces/provider';
 import type {
@@ -134,6 +135,7 @@ interface PreviewExportScreenProps {
   namespace: string;
   filterConditions: FilterCondition[];
   onSaveWorkflow: (name: string, description: string) => void;
+  onDeployWorkflow: (name: string, description: string) => Promise<void>;
   savedWorkflows: SavedWorkflow[];
 }
 
@@ -150,13 +152,19 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
   namespace,
   filterConditions,
   onSaveWorkflow,
+  onDeployWorkflow,
   savedWorkflows,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showSaveForm, setShowSaveForm] = useState(false);
+  // 'save' = save as draft, 'deploy' = save + activate
+  const [formMode, setFormMode] = useState<'save' | 'deploy'>('save');
   const [workflowName, setWorkflowName] = useState('');
   const [workflowDescription, setWorkflowDescription] = useState('');
   const [saved, setSaved] = useState(false);
+  const [deployed, setDeployed] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
   const { openManageWorkflowsWorkspace } = useOpenWorkspace();
 
   const [database, collection] = namespace.split('.');
@@ -233,22 +241,52 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
     });
   }, [configuration]);
 
-  const handleDeploy = useCallback(() => {
-    // TODO: Implement deploy functionality
-    // eslint-disable-next-line no-console
-    console.log('Deploy clicked - TODO');
+  const openForm = useCallback((mode: 'save' | 'deploy') => {
+    setFormMode(mode);
+    setDeployError(null);
+    setShowSaveForm(true);
   }, []);
 
-  const handleSaveWorkflow = useCallback(() => {
+  const handleSaveWorkflow = useCallback(async () => {
     if (!workflowName.trim()) return;
 
-    onSaveWorkflow(workflowName.trim(), workflowDescription.trim());
-    setSaved(true);
-    setShowSaveForm(false);
-    setWorkflowName('');
-    setWorkflowDescription('');
-    setTimeout(() => setSaved(false), 3000);
-  }, [workflowName, workflowDescription, onSaveWorkflow]);
+    const trimmedName = workflowName.trim();
+    const trimmedDesc = workflowDescription.trim();
+
+    if (formMode === 'deploy') {
+      setIsDeploying(true);
+      setDeployError(null);
+      try {
+        await onDeployWorkflow(trimmedName, trimmedDesc);
+        setDeployed(true);
+        setShowSaveForm(false);
+        setWorkflowName('');
+        setWorkflowDescription('');
+        setTimeout(() => setDeployed(false), 5000);
+      } catch (err) {
+        setDeployError(
+          err instanceof Error
+            ? err.message
+            : 'Deploy failed. Please try again.'
+        );
+      } finally {
+        setIsDeploying(false);
+      }
+    } else {
+      onSaveWorkflow(trimmedName, trimmedDesc);
+      setSaved(true);
+      setShowSaveForm(false);
+      setWorkflowName('');
+      setWorkflowDescription('');
+      setTimeout(() => setSaved(false), 3000);
+    }
+  }, [
+    workflowName,
+    workflowDescription,
+    formMode,
+    onSaveWorkflow,
+    onDeployWorkflow,
+  ]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -336,9 +374,16 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         <Button
           variant="primaryOutline"
           leftGlyph={<Icon glyph="Save" />}
-          onClick={() => setShowSaveForm(!showSaveForm)}
+          onClick={() => openForm('save')}
         >
-          Save Workflow
+          Save Draft
+        </Button>
+        <Button
+          variant="primary"
+          leftGlyph={<Icon glyph="Cloud" />}
+          onClick={() => openForm('deploy')}
+        >
+          Deploy &amp; Activate
         </Button>
         <Button
           variant="primaryOutline"
@@ -347,18 +392,15 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         >
           Manage Workflows
         </Button>
-        <Button
-          variant="primaryOutline"
-          leftGlyph={<Icon glyph="Cloud" />}
-          onClick={handleDeploy}
-        >
-          Deploy (TODO)
-        </Button>
       </div>
 
       {showSaveForm && (
         <div className={saveFormStyles}>
-          <Label htmlFor="workflow-name">Save Workflow</Label>
+          <Label htmlFor="workflow-name">
+            {formMode === 'deploy'
+              ? 'Deploy & Activate Workflow'
+              : 'Save Workflow as Draft'}
+          </Label>
           <TextInput
             id="workflow-name"
             aria-label="Workflow name"
@@ -374,19 +416,34 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
             value={workflowDescription}
             onChange={(e) => setWorkflowDescription(e.target.value)}
           />
+          {deployError && <Banner variant="warning">{deployError}</Banner>}
           <div className={saveFormRowStyles}>
             <Button
               variant="primary"
               size="small"
-              onClick={handleSaveWorkflow}
-              disabled={!workflowName.trim()}
+              leftGlyph={
+                isDeploying ? (
+                  <SpinLoader />
+                ) : formMode === 'deploy' ? (
+                  <Icon glyph="Cloud" />
+                ) : (
+                  <Icon glyph="Save" />
+                )
+              }
+              onClick={() => void handleSaveWorkflow()}
+              disabled={!workflowName.trim() || isDeploying}
             >
-              Save
+              {isDeploying
+                ? 'Deploying…'
+                : formMode === 'deploy'
+                ? 'Deploy & Activate'
+                : 'Save Draft'}
             </Button>
             <Button
               variant="default"
               size="small"
               onClick={() => setShowSaveForm(false)}
+              disabled={isDeploying}
             >
               Cancel
             </Button>
@@ -394,7 +451,18 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         </div>
       )}
 
-      {saved && <Banner variant="success">Workflow saved successfully!</Banner>}
+      {saved && (
+        <Banner variant="success">
+          Workflow saved as draft. You can activate it anytime from Manage
+          Workflows.
+        </Banner>
+      )}
+      {deployed && (
+        <Banner variant="success">
+          <strong>Workflow deployed!</strong> It is now active and will run on
+          its schedule.
+        </Banner>
+      )}
 
       {copied && (
         <Banner variant="success">
@@ -419,7 +487,8 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
                     </div>
                   )}
                   <div className={savedWorkflowDateStyles}>
-                    Saved: {formatDate(workflow.updatedAt)}
+                    {workflow.is_active ? '● Active' : '○ Inactive'} · Saved:{' '}
+                    {formatDate(workflow.updated_at)}
                   </div>
                 </div>
               </div>

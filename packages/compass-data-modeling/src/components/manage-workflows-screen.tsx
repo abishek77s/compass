@@ -63,13 +63,15 @@ function clearAuthFromStorage(): void {
 // Workflow type matching the backend
 interface Workflow {
   id: string;
+  user_id: string;
   name: string;
   description: string;
-  namespace: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
   config: {
     mongo: {
+      uri: string;
       database: string;
       collection: string;
       filter?: Record<string, unknown>;
@@ -78,13 +80,18 @@ interface Workflow {
     output: {
       field: string;
       mode: string;
+      status_field?: string;
+      status_value?: unknown;
     };
     prompt: string;
     model: {
       provider: string;
       name: string;
       temperature: number;
+      api_key?: string;
     };
+    conditions?: unknown[];
+    schedule?: string;
     execution: {
       limit?: number;
     };
@@ -470,7 +477,7 @@ function AuthScreen({ mittaiServerUrl, onAuthSuccess }: AuthScreenProps) {
     setIsLoading(true);
     setAuthError(null);
     try {
-      const response = await fetch(`${mittaiServerUrl}/auth/login`, {
+      const response = await fetch(`${mittaiServerUrl}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -512,7 +519,7 @@ function AuthScreen({ mittaiServerUrl, onAuthSuccess }: AuthScreenProps) {
     setIsLoading(true);
     setAuthError(null);
     try {
-      const response = await fetch(`${mittaiServerUrl}/auth/signup`, {
+      const response = await fetch(`${mittaiServerUrl}/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -714,6 +721,7 @@ function AuthScreen({ mittaiServerUrl, onAuthSuccess }: AuthScreenProps) {
 interface WorkflowCardProps {
   workflow: Workflow;
   mittaiServerUrl: string;
+  token: string;
   onSelectWorkflow?: (workflow: Workflow) => void;
   onDeleted: (id: string) => void;
   onUpdated: (updated: Workflow) => void;
@@ -743,9 +751,15 @@ function makeDraftFromWorkflow(workflow: Workflow): EditDraft {
   };
 }
 
+// Derive a display namespace from config
+function workflowNamespace(workflow: Workflow): string {
+  return `${workflow.config.mongo.database}.${workflow.config.mongo.collection}`;
+}
+
 function WorkflowCard({
   workflow,
   mittaiServerUrl,
+  token,
   onSelectWorkflow,
   onDeleted,
   onUpdated,
@@ -754,6 +768,7 @@ function WorkflowCard({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTogglingActive, setIsTogglingActive] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(() =>
     makeDraftFromWorkflow(workflow)
   );
@@ -783,6 +798,51 @@ function WorkflowCard({
     setIsEditing(false);
     setDraftErrors({});
   }, []);
+
+  const handleToggleActive = useCallback(
+    async (e: React.MouseEvent<HTMLElement>) => {
+      e.stopPropagation();
+      setIsTogglingActive(true);
+      try {
+        const response = await fetch(
+          `${mittaiServerUrl}/workflow/${workflow.id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ is_active: !workflow.is_active }),
+          }
+        );
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || response.statusText);
+        }
+        const updated = (await response.json()) as Workflow;
+        onUpdated(updated);
+        openToast('manage-workflows-toggled', {
+          variant: 'success',
+          title: updated.is_active
+            ? 'Workflow activated'
+            : 'Workflow deactivated',
+          description: `"${updated.name}" is now ${
+            updated.is_active ? 'active' : 'inactive'
+          }.`,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        openToast('manage-workflows-toggle-error', {
+          variant: 'warning',
+          title: 'Failed to toggle workflow',
+          description: message,
+        });
+      } finally {
+        setIsTogglingActive(false);
+      }
+    },
+    [mittaiServerUrl, token, workflow, onUpdated]
+  );
 
   const validateDraft = useCallback((d: EditDraft) => {
     const errors: Partial<Record<keyof EditDraft, string>> = {};
@@ -822,15 +882,18 @@ function WorkflowCard({
         const body = {
           name: draft.name.trim(),
           description: draft.description.trim(),
+          is_active: workflow.is_active,
           config: {
             ...workflow.config,
             input_fields: inputFields,
             output: {
+              ...workflow.config.output,
               field: draft.outputField.trim(),
               mode: draft.outputMode,
             },
             prompt: configPrompt,
             model: {
+              ...workflow.config.model,
               provider: draft.modelProvider,
               name: draft.modelName,
               temperature: draft.temperature,
@@ -842,10 +905,13 @@ function WorkflowCard({
         };
 
         const response = await fetch(
-          `${mittaiServerUrl}/workflows/${workflow.id}`,
+          `${mittaiServerUrl}/workflow/${workflow.id}`,
           {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
             body: JSON.stringify(body),
           }
         );
@@ -875,7 +941,7 @@ function WorkflowCard({
         setIsSaving(false);
       }
     },
-    [draft, workflow, mittaiServerUrl, onUpdated, validateDraft]
+    [draft, workflow, mittaiServerUrl, token, onUpdated, validateDraft]
   );
 
   const handleCopyConfig = useCallback(
@@ -940,6 +1006,9 @@ function WorkflowCard({
           <Icon glyph="Diagram" />
           <span className={workflowNameStyles}>{workflow.name}</span>
           <Badge variant="lightgray">{workflow.config.model.provider}</Badge>
+          <Badge variant={workflow.is_active ? 'green' : 'red'}>
+            {workflow.is_active ? 'Active' : 'Inactive'}
+          </Badge>
           {isEditing && <Badge variant="yellow">Editing</Badge>}
         </div>
 
@@ -958,6 +1027,28 @@ function WorkflowCard({
                 onClick={handleCopyConfig}
                 aria-label="Copy configuration"
               />
+              <Button
+                variant={workflow.is_active ? 'default' : 'primary'}
+                size="xsmall"
+                leftGlyph={
+                  isTogglingActive ? (
+                    <Icon glyph="Refresh" />
+                  ) : (
+                    <Icon glyph={workflow.is_active ? 'Pause' : 'Play'} />
+                  )
+                }
+                onClick={(e: React.MouseEvent<HTMLElement>) =>
+                  void handleToggleActive(e)
+                }
+                disabled={isTogglingActive}
+                aria-label={
+                  workflow.is_active
+                    ? 'Deactivate workflow'
+                    : 'Activate workflow'
+                }
+              >
+                {workflow.is_active ? 'Deactivate' : 'Activate'}
+              </Button>
               <Button
                 variant="default"
                 size="xsmall"
@@ -1007,7 +1098,7 @@ function WorkflowCard({
           <div className={workflowMetaStyles}>
             <div className={workflowMetaItemStyles}>
               <Icon glyph="Database" size="small" />
-              <span>{workflow.namespace}</span>
+              <span>{workflowNamespace(workflow)}</span>
             </div>
             <div className={workflowMetaItemStyles}>
               <Icon glyph="Edit" size="small" />
@@ -1313,8 +1404,11 @@ function WorkflowCard({
           void (async () => {
             try {
               const response = await fetch(
-                `${mittaiServerUrl}/workflows/${workflow.id}`,
-                { method: 'DELETE' }
+                `${mittaiServerUrl}/workflow/${workflow.id}`,
+                {
+                  method: 'DELETE',
+                  headers: { Authorization: `Bearer ${token}` },
+                }
               );
               if (!response.ok) {
                 throw new Error(`Failed to delete: ${response.statusText}`);
@@ -1389,8 +1483,7 @@ const ManageWorkflowsScreen: React.FC<ManageWorkflowsScreenProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const url = new URL(`${mittaiServerUrl}/workflows`);
-      if (namespace) url.searchParams.set('namespace', namespace);
+      const url = new URL(`${mittaiServerUrl}/user/workflows`);
 
       const response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${auth.token}` },
@@ -1406,7 +1499,10 @@ const ManageWorkflowsScreen: React.FC<ManageWorkflowsScreenProps> = ({
       if (!response.ok) {
         throw new Error(`Failed to fetch workflows: ${response.statusText}`);
       }
-      const data = (await response.json()) as { workflows?: Workflow[] };
+      const data = (await response.json()) as {
+        workflows?: Workflow[];
+        total?: number;
+      };
       setWorkflows(data.workflows ?? []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -1419,7 +1515,7 @@ const ManageWorkflowsScreen: React.FC<ManageWorkflowsScreenProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [auth, mittaiServerUrl, namespace]);
+  }, [auth, mittaiServerUrl]);
 
   useEffect(() => {
     if (auth) {
@@ -1444,7 +1540,7 @@ const ManageWorkflowsScreen: React.FC<ManageWorkflowsScreenProps> = ({
       (w) =>
         w.name.toLowerCase().includes(q) ||
         w.description?.toLowerCase().includes(q) ||
-        w.namespace.toLowerCase().includes(q)
+        workflowNamespace(w).toLowerCase().includes(q)
     );
   }, [workflows, searchQuery]);
 
@@ -1543,6 +1639,7 @@ const ManageWorkflowsScreen: React.FC<ManageWorkflowsScreenProps> = ({
               key={workflow.id}
               workflow={workflow}
               mittaiServerUrl={mittaiServerUrl}
+              token={auth.token}
               onSelectWorkflow={onSelectWorkflow}
               onDeleted={handleDeleted}
               onUpdated={handleUpdated}

@@ -1,4 +1,5 @@
 import { connect } from 'react-redux';
+import type { Dispatch } from 'redux';
 import type { CollectionState } from '../../modules/collection-tab';
 import {
   closeWorkflowBuilderModal,
@@ -13,6 +14,7 @@ import {
   workflowBuilderExecutionLimitChanged,
   workflowBuilderFilterConditionsChanged,
   workflowBuilderSaveWorkflow,
+  workflowBuilderDeployWorkflow,
 } from '../../modules/collection-tab';
 import WorkflowBuilderModal from './workflow-builder-modal';
 import type {
@@ -44,6 +46,7 @@ interface DispatchProps {
   onExecutionLimitChange: (limit: number) => void;
   onFilterConditionsChange: (conditions: FilterCondition[]) => void;
   onSaveWorkflow: (name: string, description: string) => void;
+  onDeployWorkflow: (name: string, description: string) => Promise<void>;
 }
 
 // Define a more flexible type for the workflow builder state from Redux
@@ -102,20 +105,39 @@ const mapStateToProps = (state: CollectionState): StateProps => {
   };
 };
 
-const mapDispatchToProps: DispatchProps = {
-  onClose: closeWorkflowBuilderModal,
-  onNextStep: workflowBuilderNextStep,
-  onPreviousStep: workflowBuilderPreviousStep,
-  onPromptChange: workflowBuilderPromptChanged,
-  onOutputFieldChange: workflowBuilderOutputFieldChanged,
-  onOutputModeChange: workflowBuilderOutputModeChanged,
-  onModelProviderChange: workflowBuilderModelProviderChanged,
-  onModelNameChange: workflowBuilderModelNameChanged,
-  onTemperatureChange: workflowBuilderTemperatureChanged,
-  onExecutionLimitChange: workflowBuilderExecutionLimitChanged,
-  onFilterConditionsChange: workflowBuilderFilterConditionsChanged,
-  onSaveWorkflow: workflowBuilderSaveWorkflow,
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapDispatchToProps = (dispatch: Dispatch<any>): DispatchProps => ({
+  onClose: () => dispatch(closeWorkflowBuilderModal()),
+  onNextStep: () => dispatch(workflowBuilderNextStep()),
+  onPreviousStep: () => dispatch(workflowBuilderPreviousStep()),
+  onPromptChange: (prompt: string) =>
+    dispatch(workflowBuilderPromptChanged(prompt)),
+  onOutputFieldChange: (field: string) =>
+    dispatch(workflowBuilderOutputFieldChanged(field)),
+  onOutputModeChange: (mode: OutputMode) =>
+    dispatch(workflowBuilderOutputModeChanged(mode)),
+  onModelProviderChange: (provider: ModelProvider) =>
+    dispatch(workflowBuilderModelProviderChanged(provider)),
+  onModelNameChange: (name: string) =>
+    dispatch(workflowBuilderModelNameChanged(name)),
+  onTemperatureChange: (temp: number) =>
+    dispatch(workflowBuilderTemperatureChanged(temp)),
+  onExecutionLimitChange: (limit: number) =>
+    dispatch(workflowBuilderExecutionLimitChanged(limit)),
+  onFilterConditionsChange: (conditions: FilterCondition[]) =>
+    dispatch(workflowBuilderFilterConditionsChanged(conditions)),
+  onSaveWorkflow: (name: string, description: string) =>
+    // The thunk returns Promise<string | null> but the prop signature is void —
+    // callers that need the ID (e.g. deploy-after-save) use onDeployWorkflow instead.
+    void dispatch(workflowBuilderSaveWorkflow(name, description)),
+  onDeployWorkflow: (name: string, description: string): Promise<void> =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (
+      dispatch(
+        workflowBuilderDeployWorkflow(name, description) as any
+      ) as Promise<boolean>
+    ).then(() => undefined),
+});
 
 export default connect<
   StateProps,
