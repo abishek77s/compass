@@ -186,6 +186,9 @@ export interface WorkflowBuilderModalProps {
   onFilterConditionsChange: (conditions: FilterCondition[]) => void;
   onSaveWorkflow: (name: string, description: string) => void;
   onDeployWorkflow: (name: string, description: string) => Promise<void>;
+  onScheduleChange: (schedule: string) => void;
+  onStatusFieldChange: (field: string) => void;
+  onStatusValueChange: (value: string) => void;
 }
 
 const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
@@ -203,6 +206,9 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
   onFilterConditionsChange,
   onSaveWorkflow,
   onDeployWorkflow,
+  onScheduleChange,
+  onStatusFieldChange,
+  onStatusValueChange,
 }) => {
   const currentStepIndex = WORKFLOW_BUILDER_STEP_ORDER.indexOf(
     state.currentStep
@@ -223,8 +229,14 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
           <OutputConfigurationScreen
             outputField={state.outputField}
             outputMode={state.outputMode}
+            schedule={state.schedule}
+            statusField={state.statusField}
+            statusValue={state.statusValue}
             onOutputFieldChange={onOutputFieldChange}
             onOutputModeChange={onOutputModeChange}
+            onScheduleChange={onScheduleChange}
+            onStatusFieldChange={onStatusFieldChange}
+            onStatusValueChange={onStatusValueChange}
           />
         );
       case WorkflowBuilderStep.FILTER_CONFIGURATION:
@@ -268,6 +280,9 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
             prompt={state.prompt}
             outputField={state.outputField}
             outputMode={state.outputMode}
+            schedule={state.schedule}
+            statusField={state.statusField}
+            statusValue={state.statusValue}
             modelProvider={state.modelProvider}
             modelName={state.modelName}
             temperature={state.temperature}
@@ -294,6 +309,9 @@ const WorkflowBuilderModal: React.FC<WorkflowBuilderModalProps> = ({
     onFilterConditionsChange,
     onSaveWorkflow,
     onDeployWorkflow,
+    onScheduleChange,
+    onStatusFieldChange,
+    onStatusValueChange,
   ]);
 
   const isNextButtonDisabled = useMemo(() => {

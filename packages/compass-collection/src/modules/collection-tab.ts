@@ -177,6 +177,9 @@ export type CollectionState = {
       };
     }>;
     selectedWorkflowId: string | null;
+    schedule: string;
+    statusField: string;
+    statusValue: string;
   };
 };
 
@@ -214,6 +217,9 @@ export enum CollectionActions {
   WorkflowBuilderFilterConditionsChanged = 'compass-collection/WorkflowBuilderFilterConditionsChanged',
   WorkflowBuilderSaveWorkflow = 'compass-collection/WorkflowBuilderSaveWorkflow',
   WorkflowBuilderLoadWorkflow = 'compass-collection/WorkflowBuilderLoadWorkflow',
+  WorkflowBuilderScheduleChanged = 'compass-collection/WorkflowBuilderScheduleChanged',
+  WorkflowBuilderStatusFieldChanged = 'compass-collection/WorkflowBuilderStatusFieldChanged',
+  WorkflowBuilderStatusValueChanged = 'compass-collection/WorkflowBuilderStatusValueChanged',
 }
 
 interface CollectionMetadataFetchedAction {
@@ -321,7 +327,12 @@ interface WorkflowBuilderLoadWorkflowAction {
         filter?: Record<string, unknown>;
       };
       input_fields: string[];
-      output: { field: string; mode: 'overwrite' | 'append' | 'new-field' };
+      output: {
+        field: string;
+        mode: 'overwrite' | 'append' | 'new-field';
+        status_field?: string;
+        status_value?: unknown;
+      };
       prompt: string;
       model: {
         provider: 'gemini' | 'openai' | 'anthropic' | 'azure-openai';
@@ -388,6 +399,21 @@ interface WorkflowBuilderExecutionLimitChangedAction {
 interface WorkflowBuilderMongoUriChangedAction {
   type: CollectionActions.WorkflowBuilderMongoUriChanged;
   uri: string;
+}
+
+interface WorkflowBuilderScheduleChangedAction {
+  type: CollectionActions.WorkflowBuilderScheduleChanged;
+  schedule: string;
+}
+
+interface WorkflowBuilderStatusFieldChangedAction {
+  type: CollectionActions.WorkflowBuilderStatusFieldChanged;
+  field: string;
+}
+
+interface WorkflowBuilderStatusValueChangedAction {
+  type: CollectionActions.WorkflowBuilderStatusValueChanged;
+  value: string;
 }
 
 interface WorkflowBuilderFilterConditionsChangedAction {
@@ -818,6 +844,9 @@ const reducer: Reducer<CollectionState, Action> = (
         filterConditions: [],
         savedWorkflows: state.workflowBuilder?.savedWorkflows ?? [],
         selectedWorkflowId: null,
+        schedule: '',
+        statusField: '',
+        statusValue: '',
       },
     };
   }
@@ -850,6 +879,13 @@ const reducer: Reducer<CollectionState, Action> = (
         filterConditions: [],
         savedWorkflows: state.workflowBuilder?.savedWorkflows ?? [],
         selectedWorkflowId: action.workflow.id,
+        schedule: action.workflow.config.schedule ?? '',
+        statusField: action.workflow.config.output.status_field ?? '',
+        statusValue:
+          action.workflow.config.output.status_value !== null &&
+          action.workflow.config.output.status_value !== undefined
+            ? JSON.stringify(action.workflow.config.output.status_value)
+            : '',
       },
     };
   }
@@ -1071,6 +1107,57 @@ const reducer: Reducer<CollectionState, Action> = (
       workflowBuilder: {
         ...state.workflowBuilder,
         filterConditions: action.conditions,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderScheduleChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderScheduleChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        schedule: action.schedule,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderStatusFieldChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderStatusFieldChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        statusField: action.field,
+      },
+    };
+  }
+
+  if (
+    isAction<WorkflowBuilderStatusValueChangedAction>(
+      action,
+      CollectionActions.WorkflowBuilderStatusValueChanged
+    )
+  ) {
+    if (!state.workflowBuilder) return state;
+
+    return {
+      ...state,
+      workflowBuilder: {
+        ...state.workflowBuilder,
+        statusValue: action.value,
       },
     };
   }
@@ -1416,6 +1503,27 @@ export const workflowBuilderFilterConditionsChanged = (
   conditions,
 });
 
+export const workflowBuilderScheduleChanged = (
+  schedule: string
+): WorkflowBuilderScheduleChangedAction => ({
+  type: CollectionActions.WorkflowBuilderScheduleChanged,
+  schedule,
+});
+
+export const workflowBuilderStatusFieldChanged = (
+  field: string
+): WorkflowBuilderStatusFieldChangedAction => ({
+  type: CollectionActions.WorkflowBuilderStatusFieldChanged,
+  field,
+});
+
+export const workflowBuilderStatusValueChanged = (
+  value: string
+): WorkflowBuilderStatusValueChangedAction => ({
+  type: CollectionActions.WorkflowBuilderStatusValueChanged,
+  value,
+});
+
 // Helper: read the stored mittai JWT from localStorage (set by ManageWorkflowsScreen).
 function getMittaiToken(): string | null {
   try {
@@ -1429,6 +1537,14 @@ function getMittaiToken(): string | null {
 }
 
 // Build the workflow config payload shared by save & deploy.
+function parseJsonValue(v: string): unknown {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
 function buildWorkflowPayload(
   name: string,
   description: string,
@@ -1442,6 +1558,9 @@ function buildWorkflowPayload(
     modelName: string;
     temperature: number;
     executionLimit: number;
+    schedule?: string;
+    statusField?: string;
+    statusValue?: string;
   },
   namespace: string
 ) {
@@ -1463,6 +1582,12 @@ function buildWorkflowPayload(
       output: {
         field: wb.outputField,
         mode: wb.outputMode,
+        ...(wb.statusField?.trim()
+          ? { status_field: wb.statusField.trim() }
+          : {}),
+        ...(wb.statusField?.trim()
+          ? { status_value: parseJsonValue(wb.statusValue ?? '') }
+          : {}),
       },
       prompt: wb.prompt,
       model: {
@@ -1474,6 +1599,7 @@ function buildWorkflowPayload(
       execution: {
         limit: wb.executionLimit > 0 ? wb.executionLimit : undefined,
       },
+      schedule: wb.schedule || undefined,
     },
   };
 }

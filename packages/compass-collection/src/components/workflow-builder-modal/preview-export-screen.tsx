@@ -126,6 +126,9 @@ interface PreviewExportScreenProps {
   prompt: string;
   outputField: string;
   outputMode: 'overwrite' | 'append' | 'new-field';
+  schedule: string;
+  statusField: string;
+  statusValue: string;
   modelProvider: string;
   modelName: string;
   temperature: number;
@@ -139,10 +142,21 @@ interface PreviewExportScreenProps {
   savedWorkflows: SavedWorkflow[];
 }
 
+function parseJsonValue(v: string): unknown {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
 const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
   prompt,
   outputField,
   outputMode,
+  schedule,
+  statusField,
+  statusValue,
   modelProvider,
   modelName,
   temperature,
@@ -184,6 +198,10 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
       output: {
         field: outputField,
         mode: outputMode,
+        ...(statusField.trim() ? { status_field: statusField.trim() } : {}),
+        ...(statusField.trim()
+          ? { status_value: parseJsonValue(statusValue) }
+          : {}),
       },
       prompt: configPrompt,
       model: {
@@ -191,6 +209,7 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
         name: modelName,
         temperature: temperature,
       },
+      schedule: schedule || undefined,
       execution: {
         limit: executionLimit > 0 ? executionLimit : undefined,
       },
@@ -203,6 +222,9 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
       inputFields,
       outputField,
       outputMode,
+      statusField,
+      statusValue,
+      schedule,
       configPrompt,
       modelProvider,
       modelName,
@@ -345,6 +367,23 @@ const PreviewExportScreen: React.FC<PreviewExportScreenProps> = ({
           <div className={summaryValueStyles}>
             {executionLimit > 0 ? executionLimit : 'No limit'}
           </div>
+
+          <div className={summaryLabelStyles}>Schedule:</div>
+          <div className={summaryValueStyles}>
+            {schedule || 'No schedule (run manually)'}
+          </div>
+
+          {statusField.trim() && (
+            <>
+              <div className={summaryLabelStyles}>Status Field:</div>
+              <div className={summaryValueStyles}>{statusField.trim()}</div>
+
+              <div className={summaryLabelStyles}>Status Value:</div>
+              <div className={summaryValueStyles}>
+                {statusValue || '(empty)'}
+              </div>
+            </>
+          )}
 
           <div className={summaryLabelStyles}>MongoDB URI:</div>
           <div className={summaryValueStyles}>{maskedUri}</div>

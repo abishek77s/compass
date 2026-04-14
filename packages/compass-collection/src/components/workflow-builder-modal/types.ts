@@ -123,6 +123,10 @@ export interface WorkflowBuilderState {
   // Saved workflows
   savedWorkflows: SavedWorkflow[];
   selectedWorkflowId: string | null;
+  // Schedule & post-processing
+  schedule: string;
+  statusField: string;
+  statusValue: string;
 }
 
 export const INITIAL_WORKFLOW_STATE: Omit<
@@ -143,6 +147,9 @@ export const INITIAL_WORKFLOW_STATE: Omit<
   testError: null,
   savedWorkflows: [],
   selectedWorkflowId: null,
+  schedule: '',
+  statusField: '',
+  statusValue: '',
 };
 
 export const MODEL_OPTIONS: Record<

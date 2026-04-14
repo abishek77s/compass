@@ -44,3 +44,15 @@ export const TEMPERATURE_MARKS = [
 export const MITTAI_SERVER_URL = 'http://localhost:8787';
 
 export const SAVED_WORKFLOWS_STORAGE_KEY = 'compass-workflow-builder-saved';
+
+export const SCHEDULE_PRESETS = [
+  { value: '', label: 'No Schedule (run manually)' },
+  { value: '@every 15m', label: 'Every 15 minutes' },
+  { value: '@every 1h', label: 'Every hour' },
+  { value: '@every 2h', label: 'Every 2 hours' },
+  { value: '@every 6h', label: 'Every 6 hours' },
+  { value: '@every 12h', label: 'Every 12 hours' },
+  { value: '@every 24h', label: 'Every day' },
+  { value: '@every 7d', label: 'Every week' },
+  { value: 'custom', label: 'Custom cron expression...' },
+];

@@ -15,6 +15,9 @@ import {
   workflowBuilderFilterConditionsChanged,
   workflowBuilderSaveWorkflow,
   workflowBuilderDeployWorkflow,
+  workflowBuilderScheduleChanged,
+  workflowBuilderStatusFieldChanged,
+  workflowBuilderStatusValueChanged,
 } from '../../modules/collection-tab';
 import WorkflowBuilderModal from './workflow-builder-modal';
 import type {
@@ -47,6 +50,9 @@ interface DispatchProps {
   onFilterConditionsChange: (conditions: FilterCondition[]) => void;
   onSaveWorkflow: (name: string, description: string) => void;
   onDeployWorkflow: (name: string, description: string) => Promise<void>;
+  onScheduleChange: (schedule: string) => void;
+  onStatusFieldChange: (field: string) => void;
+  onStatusValueChange: (value: string) => void;
 }
 
 // Define a more flexible type for the workflow builder state from Redux
@@ -65,6 +71,9 @@ interface WorkflowBuilderReduxState {
   filterConditions?: FilterCondition[];
   savedWorkflows?: WorkflowBuilderState['savedWorkflows'];
   selectedWorkflowId?: string | null;
+  schedule?: string;
+  statusField?: string;
+  statusValue?: string;
 }
 
 const mapStateToProps = (state: CollectionState): StateProps => {
@@ -101,6 +110,9 @@ const mapStateToProps = (state: CollectionState): StateProps => {
         wb?.savedWorkflows ?? INITIAL_WORKFLOW_STATE.savedWorkflows,
       selectedWorkflowId:
         wb?.selectedWorkflowId ?? INITIAL_WORKFLOW_STATE.selectedWorkflowId,
+      schedule: wb?.schedule ?? INITIAL_WORKFLOW_STATE.schedule,
+      statusField: wb?.statusField ?? INITIAL_WORKFLOW_STATE.statusField,
+      statusValue: wb?.statusValue ?? INITIAL_WORKFLOW_STATE.statusValue,
     },
   };
 };
@@ -126,6 +138,12 @@ const mapDispatchToProps = (dispatch: Dispatch<any>): DispatchProps => ({
     dispatch(workflowBuilderExecutionLimitChanged(limit)),
   onFilterConditionsChange: (conditions: FilterCondition[]) =>
     dispatch(workflowBuilderFilterConditionsChanged(conditions)),
+  onScheduleChange: (schedule: string) =>
+    dispatch(workflowBuilderScheduleChanged(schedule)),
+  onStatusFieldChange: (field: string) =>
+    dispatch(workflowBuilderStatusFieldChanged(field)),
+  onStatusValueChange: (value: string) =>
+    dispatch(workflowBuilderStatusValueChanged(value)),
   onSaveWorkflow: (name: string, description: string) =>
     // The thunk returns Promise<string | null> but the prop signature is void —
     // callers that need the ID (e.g. deploy-after-save) use onDeployWorkflow instead.
