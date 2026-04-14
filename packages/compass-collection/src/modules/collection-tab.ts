@@ -213,6 +213,7 @@ export enum CollectionActions {
   WorkflowBuilderMongoUriChanged = 'compass-collection/WorkflowBuilderMongoUriChanged',
   WorkflowBuilderFilterConditionsChanged = 'compass-collection/WorkflowBuilderFilterConditionsChanged',
   WorkflowBuilderSaveWorkflow = 'compass-collection/WorkflowBuilderSaveWorkflow',
+  WorkflowBuilderLoadWorkflow = 'compass-collection/WorkflowBuilderLoadWorkflow',
 }
 
 interface CollectionMetadataFetchedAction {
@@ -303,6 +304,34 @@ interface WorkflowBuilderModalOpenedAction {
   type: CollectionActions.WorkflowBuilderModalOpened;
   sampleDocument: Document | null;
   mongoUri: string;
+}
+
+interface WorkflowBuilderLoadWorkflowAction {
+  type: CollectionActions.WorkflowBuilderLoadWorkflow;
+  workflow: {
+    id: string;
+    name: string;
+    description: string;
+    namespace: string;
+    config: {
+      mongo: {
+        database: string;
+        collection: string;
+        filter?: Record<string, unknown>;
+      };
+      input_fields: string[];
+      output: { field: string; mode: 'overwrite' | 'append' | 'new-field' };
+      prompt: string;
+      model: {
+        provider: 'gemini' | 'openai' | 'anthropic' | 'azure-openai';
+        name: string;
+        temperature: number;
+      };
+      execution: { limit?: number };
+    };
+  };
+  mongoUri: string;
+  sampleDocument: Document | null;
 }
 
 interface WorkflowBuilderModalClosedAction {
@@ -790,6 +819,38 @@ const reducer: Reducer<CollectionState, Action> = (
   }
 
   if (
+    isAction<WorkflowBuilderLoadWorkflowAction>(
+      action,
+      CollectionActions.WorkflowBuilderLoadWorkflow
+    )
+  ) {
+    // Convert {{fieldname}} back to @fieldname for the editor
+    const editorPrompt = action.workflow.config.prompt.replace(
+      /\{\{([\w.]+)\}\}/g,
+      '@$1'
+    );
+    return {
+      ...state,
+      workflowBuilder: {
+        isModalOpen: true,
+        currentStep: 'prompt-configuration',
+        prompt: editorPrompt,
+        outputField: action.workflow.config.output.field,
+        outputMode: action.workflow.config.output.mode,
+        modelProvider: action.workflow.config.model.provider,
+        modelName: action.workflow.config.model.name,
+        temperature: action.workflow.config.model.temperature,
+        executionLimit: action.workflow.config.execution.limit ?? 5,
+        mongoUri: action.mongoUri,
+        sampleDocument: action.sampleDocument,
+        filterConditions: [],
+        savedWorkflows: state.workflowBuilder?.savedWorkflows ?? [],
+        selectedWorkflowId: action.workflow.id,
+      },
+    };
+  }
+
+  if (
     isAction<WorkflowBuilderModalClosedAction>(
       action,
       CollectionActions.WorkflowBuilderModalClosed
@@ -1213,6 +1274,55 @@ export const openWorkflowBuilderModal = (): CollectionThunkAction<
         mongoLogId(1_001_000_365),
         'Collections',
         'Failed to open workflow builder modal',
+        error
+      );
+    }
+  };
+};
+
+export const loadWorkflowForEditing = (
+  workflow: WorkflowBuilderLoadWorkflowAction['workflow']
+): CollectionThunkAction<Promise<void>> => {
+  return async (dispatch, getState, { dataService, logger }) => {
+    try {
+      let mongoUri = 'mongodb://localhost:27017';
+      try {
+        const connectionString = dataService.getConnectionString().clone();
+        if (
+          /^(mongodb compass|compass web)/i.exec(
+            connectionString.searchParams.get('appName') || ''
+          )
+        ) {
+          connectionString.searchParams.delete('appName');
+        }
+        mongoUri = connectionString.href;
+      } catch {
+        // fall back to default
+      }
+
+      const namespace = `${workflow.config.mongo.database}.${workflow.config.mongo.collection}`;
+      let sampleDocument: Document | null = null;
+      try {
+        const sampleDocs = await dataService.sample(namespace, {
+          size: 1,
+          query: {},
+        });
+        sampleDocument = sampleDocs[0] || null;
+      } catch {
+        // ignore — proceed without a sample document
+      }
+
+      dispatch({
+        type: CollectionActions.WorkflowBuilderLoadWorkflow,
+        workflow,
+        mongoUri,
+        sampleDocument,
+      });
+    } catch (error) {
+      logger.log.error(
+        mongoLogId(1_001_000_366),
+        'Collections',
+        'Failed to load workflow for editing',
         error
       );
     }

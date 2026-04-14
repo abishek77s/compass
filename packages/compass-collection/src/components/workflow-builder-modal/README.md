@@ -51,9 +51,9 @@ The workflow builder guides users through a 6-step process to configure an AI pi
 
 ### `packages/compass-sidebar/`
 
-| File                                                            | Purpose                                                                                                                        |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `src/components/multiple-connections/navigation/navigation.tsx` | "Manage Workflows" navigation item nested under "Data Modeling"; opens as a workspace tab via `openManageWorkflowsWorkspace()` |
+| File                                                            | Purpose                                                                                                                                                         |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/components/multiple-connections/navigation/navigation.tsx` | "Manage Workflows" is a top-level navigation item (peer of "Data Modeling", not nested under it); opens as a workspace tab via `openManageWorkflowsWorkspace()` |
 
 ### `packages/compass/`
 
@@ -75,6 +75,15 @@ The workflow builder guides users through a 6-step process to configure an AI pi
 | `model-configuration-screen.tsx`       | Provider/model dropdowns, temperature slider, execution limit input                                                                                          |
 | `preview-export-screen.tsx`            | Read-only JSON config preview, copy-to-clipboard, save/name workflow. "Manage Workflows" button opens the workspace tab via `openManageWorkflowsWorkspace()` |
 
+### `mittai/server/` (backend)
+
+| File            | Purpose                                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth.go`       | User storage (`UserStorage`, persisted to `users.json`), bcrypt password hashing, JWT generation, `handleSignup` and `handleLogin` HTTP handlers |
+| `auth_types.go` | Auth-specific request/response types: `SignupRequest`, `LoginRequest`, `PublicUser`, `AuthResponse`                                              |
+| `main.go`       | Registers `POST /auth/signup` and `POST /auth/login` routes alongside the existing workflow and test routes                                      |
+| `go.mod`        | Added `github.com/golang-jwt/jwt/v5` as a direct dependency                                                                                      |
+
 ## Architecture
 
 - **State management**: All workflow state lives in the `workflowBuilder` key of the collection-tab Redux store. Actions are plain Redux actions; async work uses thunks.
@@ -82,4 +91,74 @@ The workflow builder guides users through a 6-step process to configure an AI pi
 - **Prompt syntax**: `@fieldname` in the prompt is converted to `{{fieldname}}` in the exported config. Fields are auto-extracted for the `input_fields` array.
 - **Filters**: UI filter conditions are converted to a standard MongoDB query filter via `buildMongoFilter()`.
 - **Persistence**: Saved workflows are stored under `compass-workflow-builder-saved` in local storage.
-- **Navigation**: "Manage Workflows" is a full workspace tab (not a modal) nested under **Data Modeling** in the sidebar. It opens in a new tab just like opening a collection — covering the right half of the page. The workspace type `'Manage Workflows'` is registered in `compass-workspaces` and the tab plugin is exported from `compass-data-modeling`. Clicking the sidebar item or the "Manage Workflows" button in the preview screen both call `openManageWorkflowsWorkspace()` which dispatches `openWorkspace({ type: 'Manage Workflows' }, { newTab: true })`.
+- **Navigation**: "Manage Workflows" is a full workspace tab (not a modal) that appears as a **top-level sidebar item**, at the same level as "Data Modeling" — not nested beneath it. It is independently controlled by the `enableWorkflowManagement` preference. It opens in a new tab just like opening a collection — covering the right half of the page. The workspace type `'Manage Workflows'` is registered in `compass-workspaces` and the tab plugin is exported from `compass-data-modeling`. Clicking the sidebar item or the "Manage Workflows" button in the preview screen both call `openManageWorkflowsWorkspace()` which dispatches `openWorkspace({ type: 'Manage Workflows' }, { newTab: true })`.
+
+## Authentication (mittai server)
+
+The mittai server now supports user accounts via two endpoints:
+
+### `POST /auth/signup`
+
+Create a new account.
+
+**Request body:**
+
+```json
+{
+  "username": "alice",
+  "email": "alice@example.com",
+  "password": "supersecret"
+}
+```
+
+**Response `201 Created`:**
+
+```json
+{
+  "token": "<jwt>",
+  "user": {
+    "id": "user-1234567890",
+    "username": "alice",
+    "email": "alice@example.com",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+### `POST /auth/login`
+
+Authenticate with an existing account.
+
+**Request body:**
+
+```json
+{
+  "email": "alice@example.com",
+  "password": "supersecret"
+}
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "token": "<jwt>",
+  "user": {
+    "id": "user-1234567890",
+    "username": "alice",
+    "email": "alice@example.com",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+### JWT details
+
+- Algorithm: **HS256**
+- Expiry: **24 hours**
+- Claims: `sub` (user ID), `username`, `exp`
+- Secret: read from the `JWT_SECRET` environment variable; falls back to `"mittai-secret-key"` if not set. **Set `JWT_SECRET` to a strong random value in production.**
+
+### User persistence
+
+User records (excluding plaintext passwords — only bcrypt hashes are stored) are persisted to `users.json` on disk alongside `workflows.json`, using the same mutex-guarded storage pattern as `WorkflowStorage`.

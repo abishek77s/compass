@@ -156,7 +156,7 @@ export const FEATURE_FLAG_DEFINITIONS = [
    */
   {
     name: 'enableWorkflowManagement',
-    stage: 'development',
+    stage: 'released',
     atlasCloudFeatureFlagName: null,
     description: {
       short: 'Enable AI Workflow Management for managing saved workflows',
